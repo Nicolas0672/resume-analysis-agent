@@ -1,0 +1,38 @@
+from pydantic import BaseModel, Field, model_validator
+
+
+class JobDetails(BaseModel):
+    is_valid: bool = Field(
+        description="Indicates whether the details are valid for a job application"
+    )
+
+    job_title: str = Field(
+        description="The title of the job position"
+    )
+
+    job_description: str = Field(
+        description="The description of the job position"
+    )
+
+    job_requirements: str = Field(
+        description="The requirements for the job position"
+    )
+
+    job_company: str = Field(
+        description="The company offering the job"
+    )
+
+    job_location: str = Field(
+        description="The location of the job"
+    )
+
+    @model_validator(mode="after")
+    def clear_fields_if_invalid(self):
+        if not self.is_valid:
+            self.job_title = ""
+            self.job_description = ""
+            self.job_requirements = ""
+            self.job_company = ""
+            self.job_location = ""
+
+        return self

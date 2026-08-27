@@ -3,8 +3,6 @@ from io import BytesIO
 
 from docx import Document
 
-doc = Document("D:\\Documents\\resume-agent\\backend\\resume-parser\\Nicolas_Ouch_Resume.docx")
-
 def open_docx(file_bytes: bytes) -> Document:
     try:
         return Document(BytesIO(file_bytes))
@@ -27,4 +25,6 @@ def parse_docx(doc):
 def parse_resume(file_bytes: bytes):
     doc = open_docx(file_bytes)
     return parse_docx(doc)
+
+
 
