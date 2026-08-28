@@ -26,6 +26,10 @@ class JobDetails(BaseModel):
         description="The location of the job"
     )
 
+    job_responsibilities: str = Field(
+        description="The responsibilities associated with the job position"
+    )
+
     @model_validator(mode="after")
     def clear_fields_if_invalid(self):
         if not self.is_valid:
@@ -34,5 +38,6 @@ class JobDetails(BaseModel):
             self.job_requirements = ""
             self.job_company = ""
             self.job_location = ""
+            self.job_responsibilities = ""
 
         return self

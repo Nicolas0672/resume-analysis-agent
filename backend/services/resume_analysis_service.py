@@ -18,9 +18,7 @@ async def process_resume_analysis(file_bytes: bytes, job_url: str):
     
     return {
         "parsed_resume": parsed_resume,
-        "job_title": validated_job_details.job_title,
-        "job_description": validated_job_details.job_description,
-        "job_requirements": validated_job_details.job_requirements,
+        "job_details": validated_job_details
     }
 
 
