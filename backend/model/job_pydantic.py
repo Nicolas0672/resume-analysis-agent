@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -30,6 +32,10 @@ class JobDetails(BaseModel):
         description="The responsibilities associated with the job position"
     )
 
+    job_preffered_requirements: Optional[str] = Field(
+        description="The preffered requirements of job if listed. If none is specified, return empty string"
+    )
+
     @model_validator(mode="after")
     def clear_fields_if_invalid(self):
         if not self.is_valid:
@@ -39,5 +45,6 @@ class JobDetails(BaseModel):
             self.job_company = ""
             self.job_location = ""
             self.job_responsibilities = ""
+            self.job_preffered_requirements = ""
 
         return self

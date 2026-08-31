@@ -20,15 +20,17 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(.
     file_bytes = await file.read()
     resume_data = await process_resume_analysis(file_bytes, str(job_link))
 
-    await initialize_tailoring_session(
+    ai_response =await initialize_tailoring_session(
         session_id=session_id,
         parsed_resume=resume_data["parsed_resume"],
-        job_details=resume_data["job_details"]
+        job_details=resume_data["job_details"],
+        candidate_profile_data=None
     )
 
     return {
         "message": "Resume processed successfully",
-        "session_id": session_id
+        "session_id": session_id,
+        "ai_response": ai_response
     }
 
 # Validation of router
