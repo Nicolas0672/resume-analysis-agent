@@ -8,8 +8,16 @@ async def interview_agent(state: AgentState):
     gaps = state['gaps']
     strengths = state['strengths']
     resume_data = state['resume_data']
-    relevant_experience = state['relevant_experience']
-    job_details = state['job_details']
+    relevant_experience = state.get('relevant_experience', None)
+
+    fields = ["job_title", "job_preferred_requirement", "job_responsibilities", "job_description", "job_requirements", "job_company"]
+
+    job_details = state.get("job_details")
+
+    selected = {
+        field: getattr(job_details, field, None)
+        for field in fields
+    }
 
     interview_planner_prompt = ChatPromptTemplate.from_messages([
         ("system",
@@ -59,7 +67,7 @@ async def interview_agent(state: AgentState):
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(InterviewPlan)
     response = await llm_structured.ainvoke(interview_planner_prompt.format_messages(
-        job_details=job_details, strengths=strengths, gaps=gaps, relevant_experience=relevant_experience, resume_data=resume_data)
+        job_details=selected, strengths=strengths, gaps=gaps, relevant_experience=relevant_experience, resume_data=resume_data)
         )
     
     return {

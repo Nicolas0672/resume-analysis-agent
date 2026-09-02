@@ -2,10 +2,10 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import HttpUrl
-from backend.agent.graph import initialize_tailoring_session
+from backend.agent.graph import initialize_tailoring_session, resume_tailoring_session
 from backend.services.resume_analysis_service import process_resume_analysis
 
-router = APIRouter(prefix="/resumes")
+router = APIRouter(prefix="/tailor")
 
 @router.post("/upload")
 async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(...)):
@@ -33,4 +33,17 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(.
         "ai_response": ai_response
     }
 
-# Validation of router
+@router.post("/chat")
+async def chat(session_id: str = Form(...), user_message: str = Form(...)):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    if not user_message:
+        raise HTTPException(status_code=400, detail="User message is required")
+
+    response = await resume_tailoring_session(session_id=session_id, user_message=user_message)
+
+    return {
+        "message": "Message processed successfully",
+        "ai_response": response
+    }

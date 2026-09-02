@@ -1,18 +1,69 @@
+from langchain_openai import ChatOpenAI
+
+from backend.agent.model import InterviewDetailsWithEvidence, InvestigateOutput
+from backend.agent.state import AgentState
+from langchain_core.prompts import ChatPromptTemplate
+
+async def investigate_candidate(state: AgentState):
+    topic_id = state["topic_id_selection"]
+    conversation_history = state["investigation_messages"] if len(state["investigation_messages"]) > 0 else "No previous conversation available as of current"
+
+    selected = next(
+        item
+        for item in state["interview_plan"]
+        if item.topic_id == topic_id
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system",     
 """
-You are a focused interview agent investigating one specific requirement.
+Your task is to investigate the current topic until the investigation
+objective can be answered with sufficient evidence. If determined that the candidate
+does not have enough required experience to confidently answer the objective, return a message to the user that more experience is needed
 
-Determine whether the candidate has relevant experience by asking concise,
-neutral, evidence-seeking questions.
-
-Explore:
-- actual usage
-- context
-- personal ownership
+Before asking another question, determine whether you already have
+enough information about:
+- what the candidate actually did
+- their personal ownership
+- relevant technical context
 - scope
-- outcomes or metrics when relevant
+- outcomes/metrics when applicable
 
-Never assume or fabricate experience or metrics.
-Treat the candidate's answers as the source of truth.
-Ask one question at a time.
-Stop when the investigation has enough evidence to be reasonably understood.
-"""
+Do not ask for information that has already been established.
+Ask exactly one question at a time.
+
+If the objective has been sufficiently satisfied, stop investigating.
+"""),
+    ("human", 
+     """conversation history: {conversation_history}, topic: {topic}, reasoning for investigation: {reason}, any relevant experience: {relevant_experience}
+        objective: {objective} and job requirement for context: {job_requirement}
+     """)
+    ])
+
+    model = ChatOpenAI(model="gpt-4o")
+    llm_structured = model.with_structured_output(InvestigateOutput)
+    response = await llm_structured.ainvoke(prompt.format_messages(
+        topic=selected["topic"], reason=selected["reason"], relevant_experience=selected["relevant_experience"],
+        objective=selected["objective"], job_requirement=["job_requirement"], conversation_history=conversation_history
+        ))
+    
+    if response.need_more_info == False:
+        updated_details = InterviewDetailsWithEvidence(
+            selected, evidence=response.evidence
+        )
+        return {
+            "investigation_messages": response["user_message"],
+            "need_more_info": response["need_more_info"],
+            "interview_details_with_evidence": updated_details,
+            "completed_topic_ids": topic_id
+        }
+
+
+    return {
+        "investigation_messages": response["user_message"],
+        "need_more_info": response["need_more_info"],
+    }
+    
+
+
+

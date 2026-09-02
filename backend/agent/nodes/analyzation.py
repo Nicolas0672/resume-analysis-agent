@@ -12,22 +12,27 @@ async def analyze_candidate(state: AgentState):
 
     prompt = ChatPromptTemplate.from_messages(
         [("system", """
-    You are a resume analysis agent. Your task is to analyze the candidate's resume and provide insights based on the job details provided.
+You are a resume analysis agent. Analyze the candidate's resume and candidate profile data against the job description as a whole. Assume the applicant is a US citizen and authorized to work in the US.
+
 Return:
 
-score: overall fit based on ALL job requirements. Be strict and evidence-based. A candidate should not be considered a strong match simply because they have strong experience in a few core technologies. Missing multiple hard requirements must significantly reduce the rating.
+score: overall fit based on ALL job requirements. Be strict and evidence-based. Strong experience in a few areas does not compensate for multiple missing hard requirements.
 
-strong match: Candidate clearly satisfies nearly all critical hard requirements, with only minor gaps or preferred-skill gaps.
-good match: Candidate satisfies most critical hard requirements, but has some meaningful gaps.
-weak match: Candidate is missing multiple critical hard requirements, lacks evidence for several required qualifications, or does not provide enough resume evidence to confidently establish fit.
+strengths: Confirmed matches, including technical skills, tools, platforms, domain knowledge, experience, education, coursework, and relevant soft skills when explicitly supported.
 
-strengths: key confirmed matches between the resume, candidate profile data and job.
-gaps: ALL meaningful missing or partially matched requirements. Do not limit gaps to the top few. Check every explicit hard requirement, including education/degree, technical skills, tools, databases, cloud, domain knowledge, and required experience. Group duplicate/related requirements where appropriate.
-relevant_experience: experience from candidate_profile_data ONLY that matches the job requirements. If none is provided or relevant, return null.
+gaps: ALL meaningful missing or partially supported job requirements. Check technical skills, tools, databases, cloud, domain knowledge, coursework, certifications, and required experience. Group related gaps where appropriate.
+      gaps should contain meaningful areas for improvement in the candidate's qualifications, skills, experience, or background. Do not include application logistics, availability, timing, or eligibility
 
-Do not infer or assume skills, education, experience, or qualifications that are not explicitly supported by the provided data. Distinguish between confirmed matches, partial matches, and missing requirements. Do not require exact technology matches when related experience is transferable. Evaluate the underlying skill as well as the specific technology requested. 
+relevant_experience: Relevant experience from candidate_profile_data ONLY. Return null if none is relevant.
 
-Job benefits and non-requirement information should not be considered gaps.
+Rules:
+
+* Use only information explicitly supported by the candidate data. Do not infer or assume qualifications.
+- Determine education requirements from the job description. For undergraduate/intern roles, do not treat an incomplete degree as a gap when the role is intended for students. For new-grad or degree-required roles, only flag education when the candidate does not meet the stated requirement.
+* Do not treat missing information as a gap unless the job explicitly requires it.
+* Do not flag company/mission interest or enthusiasm unless explicitly stated as a job requirement and not shown through candidate experience.
+* Related or transferable experience can satisfy a requirement when the underlying skill is demonstrated; exact technology matches are not always necessary.
+* Exclude benefits and other non-requirement information from gaps.
         """),
         ("human", """
 

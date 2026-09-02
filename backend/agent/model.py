@@ -12,13 +12,33 @@ class CandidateAnalysis(BaseModel):
 
 class InterviewDetails(BaseModel):
     topic_id: str = Field(description="Unique identifier for topic")
-    priotize: Literal["Low", "Medium", "High"]
+    priority: Literal["Low", "Medium", "High"]
     relevant_experience: list[str]
     topic: str
     reason: str
     objective: str
+    job_requirement: str = Field(description="The job requirements listed for this skill")
 
 class InterviewPlan(BaseModel):
     interview_plan: List[InterviewDetails]
+
+class Evidence(BaseModel):
+    experience_found: Optional[str]
+    technologies: list[str]
+    ownership: Optional[str]
+    scope: Optional[str]
+    metrics: Optional[str]
+    impact: Optional[str]
+
+class InvestigateOutput(BaseModel):
+    need_more_info: bool = Field(description="If more context is needed to investigate candidate experience, return True, else False")
+    user_message: str = Field(description="Message to the user asking for more details/clarification or letting them know they've provided enough context")
+    evidence: Evidence | None
+
+class InterviewDetailsWithEvidence(BaseModel):
+    evidence: Evidence | None 
+    interview_details: InterviewDetails | None
+
+
 
 
