@@ -10,7 +10,7 @@ async def interview_agent(state: AgentState):
     resume_data = state['resume_data']
     relevant_experience = state.get('relevant_experience', None)
 
-    fields = ["job_title", "job_preferred_requirement", "job_responsibilities", "job_description", "job_requirements", "job_company"]
+    fields = ["job_title", "job_preferred_requirement", "job_responsibilities", "job_requirements", "job_company"]
 
     job_details = state.get("job_details")
 
@@ -18,6 +18,9 @@ async def interview_agent(state: AgentState):
         field: getattr(job_details, field, None)
         for field in fields
     }
+
+    if selected["job_preferred_requirement"] is None:
+        selected["job_preferred_requirement"] = "No preferred requirements available"
 
     interview_planner_prompt = ChatPromptTemplate.from_messages([
         ("system",
@@ -31,6 +34,7 @@ async def interview_agent(state: AgentState):
     - Explain what evidence is missing or unclear.
     - Identify what the interview should establish.
     - Prioritize investigations based on job importance and likelihood of uncovering useful evidence.
+    - Investigation targets should not contain availability of candidate for the job. Assume the candidate is available to work for the job.
     - Consider transferable experience when deciding whether a gap is worth investigating.
 
     Do not invent or assume candidate experience, skills, metrics, or outcomes.

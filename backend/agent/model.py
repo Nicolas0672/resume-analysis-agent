@@ -4,10 +4,19 @@ from pydantic import BaseModel, Field
 
 
 class CandidateAnalysis(BaseModel):
-    score: Literal["weak match", "good match", "strong match"] = Field(description="The score of the candidate's resume against the job description.")
+    score: Literal["weak match", "good match", "strong match"] = Field(description=
+"""
+Overall fit based on ALL job requirements. Be strict and evidence-based. Strong experience in a few areas does not compensate for multiple missing hard requirements.
+""")
     relevant_experience: Optional[str] = Field(description="Relevant experience from candidate's profile that closely matches the job description. If no relevant experience is found, this field will be None")
-    strengths: list[str] = Field(description="List of strengths found in the candidate's profile.")
-    gaps: list[str] = Field(description="List of gaps found in the candidate's profile.")
+    strengths: Optional[list[str]] = Field(description="Confirmed matches, including technical skills, tools, platforms, domain knowledge, experience, education, coursework, and relevant soft skills when explicitly supported.")
+    gaps: Optional[list[str]] = Field(description=
+"""
+Identify only meaningful deficiencies in the candidate's qualifications, skills, experience, or background relative to the job requirements. Do not identify gaps related to work authorization, citizenship, availability, timing, eligibility, or semester-remaining requirements, as these criteria should be assumed satisfied.
+relevant_experience: Relevant experience from candidate_profile_data ONLY. Return null if none is relevant.
+Do not include redundant, overlapping, or substantially similar gaps. Each gap should represent a distinct meaningful deficiency.
+If no gaps are found, return empty list.
+""")
     user_message: str = Field(description="A message to the user providing insights on the candidate's resume and relevant experience.")
 
 class InterviewDetails(BaseModel):

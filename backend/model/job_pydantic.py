@@ -12,10 +12,6 @@ class JobDetails(BaseModel):
         description="The title of the job position"
     )
 
-    job_description: str = Field(
-        description="The description of the job position"
-    )
-
     job_requirements: list[str] = Field(
         description="The requirements for the job position"
     )
@@ -32,8 +28,8 @@ class JobDetails(BaseModel):
         description="The responsibilities associated with the job position"
     )
 
-    job_preffered_requirements: Optional[list[str]] = Field(
-        description="The preffered requirements of job if listed. If none is specified, return empty list"
+    job_preferred_requirement: Optional[list[str]] = Field(
+        description="The preferred requirements of job if listed. If none is specified, return empty list"
     )
 
     @model_validator(mode="after")
@@ -45,6 +41,6 @@ class JobDetails(BaseModel):
             self.job_company = ""
             self.job_location = ""
             self.job_responsibilities = ""
-            self.job_preffered_requirements = ""
+            self.job_preferred_requirement = ""
 
         return self

@@ -8,22 +8,22 @@ async def analyze_candidate(state: AgentState):
 
     resume_data = state.get("resume_data")
     job_details = state.get("job_details")
+    job_requirements = job_details.job_requirements
+    job_preferred_requirement = job_details.job_preferred_requirement if job_details.job_preferred_requirement is not None else "No preferred requirements available"
+
+    fields = ["job_title", "job_responsibilities",  "job_company"]
+
+    selected = {
+        field: getattr(job_details, field, None)
+        for field in fields
+    }
+
     candidate_profile_data = state.get("candidate_profile_data", "no experience available")
 
     prompt = ChatPromptTemplate.from_messages(
         [("system", """
-You are a resume analysis agent. Analyze the candidate's resume and candidate profile data against the job description as a whole. Assume the applicant is a US citizen and authorized to work in the US.
-
-Return:
-
-score: overall fit based on ALL job requirements. Be strict and evidence-based. Strong experience in a few areas does not compensate for multiple missing hard requirements.
-
-strengths: Confirmed matches, including technical skills, tools, platforms, domain knowledge, experience, education, coursework, and relevant soft skills when explicitly supported.
-
-gaps: ALL meaningful missing or partially supported job requirements. Check technical skills, tools, databases, cloud, domain knowledge, coursework, certifications, and required experience. Group related gaps where appropriate.
-      gaps should contain meaningful areas for improvement in the candidate's qualifications, skills, experience, or background. Do not include application logistics, availability, timing, or eligibility
-
-relevant_experience: Relevant experience from candidate_profile_data ONLY. Return null if none is relevant.
+You are a resume analysis agent. Analyze the candidate's resume and candidate profile data. Prioritize comparing candidate against the job_requirements and job_preferred_requirement. Assume the applicant is a US citizen and authorized to work in the US and available to work for the duration or completion of the job
+and meets any requirement for having at least one semester remaining.
 
 Rules:
 
@@ -35,7 +35,8 @@ Rules:
 * Exclude benefits and other non-requirement information from gaps.
         """),
         ("human", """
-
+        job_requirements: {job_requirements}
+        job_preferred_requirement: {job_preferred_requirement}
         Resume Data: {resume_data}
         Job Details: {job_details}
         Candidate Profile Data: {candidate_profile_data}
@@ -44,7 +45,7 @@ Rules:
 
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(CandidateAnalysis)
-    response = await llm_structured.ainvoke(prompt.format_messages(job_details=job_details, resume_data=resume_data, candidate_profile_data=candidate_profile_data))
+    response = await llm_structured.ainvoke(prompt.format_messages(job_details=selected, resume_data=resume_data, candidate_profile_data=candidate_profile_data, job_requirements=job_requirements, job_preferred_requirement=job_preferred_requirement))
 
     return {
         "score": response.score,

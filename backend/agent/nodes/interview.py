@@ -10,7 +10,7 @@ async def investigate_candidate(state: AgentState):
 
     selected = next(
         item
-        for item in state["interview_plan"]
+        for item in state.get("interview_plan").interview_plan
         if item.topic_id == topic_id
     )
 
@@ -43,25 +43,25 @@ If the objective has been sufficiently satisfied, stop investigating.
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(InvestigateOutput)
     response = await llm_structured.ainvoke(prompt.format_messages(
-        topic=selected["topic"], reason=selected["reason"], relevant_experience=selected["relevant_experience"],
-        objective=selected["objective"], job_requirement=["job_requirement"], conversation_history=conversation_history
+        topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
+        objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history
         ))
     
     if response.need_more_info == False:
         updated_details = InterviewDetailsWithEvidence(
-            selected, evidence=response.evidence
+            interview_details=selected, evidence=response.evidence
         )
         return {
-            "investigation_messages": response["user_message"],
-            "need_more_info": response["need_more_info"],
+            "investigation_messages": response.user_message,
+            "need_more_info": response.need_more_info,
             "interview_details_with_evidence": updated_details,
             "completed_topic_ids": topic_id
         }
 
 
     return {
-        "investigation_messages": response["user_message"],
-        "need_more_info": response["need_more_info"],
+        "investigation_messages": response.user_message,
+        "need_more_info": response.need_more_info,
     }
     
 

@@ -1,6 +1,7 @@
+from fastapi import Request
 from langgraph.types import Command
 from langgraph.graph import StateGraph, END, START
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import ToolNode
 from enum import Enum
 
@@ -10,6 +11,7 @@ from backend.agent.nodes.interview_planner import interview_agent
 from backend.agent.router import route_investigation_or_tailoring, router_after_analysis, router_to_stop_investigation
 from backend.agent.state import AgentState
 from backend.agent.nodes.analyzation import analyze_candidate
+import sqlite3
 
 class NodesNames(str, Enum):
     ANALYZE_CANDIDATE = "analyze_candidate"
@@ -74,8 +76,6 @@ candidate = {
     "summary": "Software engineer with a non-traditional background spanning retail, operations, and backend development. Experienced with Python, MongoDB, AWS, and API development."
 }
 
-memory = MemorySaver()
-
 graph = StateGraph(AgentState)
 graph.add_node(NodesNames.ANALYZE_CANDIDATE, analyze_candidate)
 graph.add_node(NodesNames.HUMAN_AFTER_ANALYSIS, human_after_analysis)
@@ -102,16 +102,15 @@ graph.add_conditional_edges(NodesNames.INVESTIGATE_CANDIDATE, router_to_stop_inv
     "continue": NodesNames.INVESTIGATE_CANDIDATE
 })
 
-graph_with_memory = graph.compile(checkpointer=memory)
 
-
-async def initialize_tailoring_session(session_id: str, parsed_resume: dict, job_details: dict, candidate_profile_data: dict = None):
+async def initialize_tailoring_session(session_id: str, parsed_resume: dict, job_details: dict, candidate_profile_data: dict = None, request: Request = None):
     config = {
         "configurable": {
             "thread_id": session_id
         }
     }
 
+    graph_with_memory = request.app.state.graph_with_memory
 
     response = await graph_with_memory.ainvoke({
         "resume_data": parsed_resume,
@@ -121,12 +120,14 @@ async def initialize_tailoring_session(session_id: str, parsed_resume: dict, job
 
     return response
 
-async def resume_tailoring_session(session_id: str, user_message: str):
+async def resume_tailoring_session(session_id: str, user_message: str, request: Request = None):
     config = {
         "configurable": {
             "thread_id": session_id
         }
     }
+    graph_with_memory = request.app.state.graph_with_memory
+
     state = await graph_with_memory.aget_state(config)
 
     print("SESSION:", session_id)
