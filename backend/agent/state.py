@@ -4,13 +4,14 @@ from typing import Annotated, List, Literal, Optional, Sequence, TypedDict
 from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
 
-from backend.agent.model import Evidence, InterviewDetailsWithEvidence, InterviewPlan
+from backend.agent.model import CandidateAnalysis, Evidence, FeedbackOnTailoredBullets, InterviewDetailsWithEvidence, InterviewPlan, TailoredBullets
 from backend.model.job_pydantic import JobDetails
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     resume_data: dict
     job_details: JobDetails
+    candidate_analysis: CandidateAnalysis
     candidate_profile_data: Optional[dict] 
     human_next_action: Optional[str]
 
@@ -29,6 +30,9 @@ class AgentState(TypedDict):
 
     investigation_messages: Annotated[Sequence[BaseMessage], add_messages]
     interview_details_with_evidence: Annotated[list[InterviewDetailsWithEvidence], add]
+
+    tailored_bullets: List[TailoredBullets]
+    feedback_on_tailored_bullets: FeedbackOnTailoredBullets | None
 
     
 

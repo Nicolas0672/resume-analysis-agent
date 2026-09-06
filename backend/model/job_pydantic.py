@@ -9,38 +9,22 @@ class JobDetails(BaseModel):
     )
 
     job_title: str = Field(
-        description="The title of the job position"
+        description="The title of the job position. If title is not provided or is invalid, this field will be empty."
     )
 
     job_requirements: list[str] = Field(
-        description="The requirements for the job position"
+        description="All requirements including mandatory and preferred for the job position. If requirements are not provided or are invalid, this field will be empty."
     )
 
     job_company: str = Field(
-        description="The company offering the job"
+        description="The company offering the job. If company is not provided or is invalid, this field will be empty."
     )
 
     job_location: str = Field(
-        description="The location of the job"
+        description="The location of the job. If location is not provided or is invalid, this field will be empty."
     )
 
     job_responsibilities: list[str] = Field(
-        description="The responsibilities associated with the job position"
+        description="The responsibilities associated with the job position. If responsibilities are not provided or are invalid, this field will be empty."
     )
 
-    job_preferred_requirement: Optional[list[str]] = Field(
-        description="The preferred requirements of job if listed. If none is specified, return empty list"
-    )
-
-    @model_validator(mode="after")
-    def clear_fields_if_invalid(self):
-        if not self.is_valid:
-            self.job_title = ""
-            self.job_description = ""
-            self.job_requirements = ""
-            self.job_company = ""
-            self.job_location = ""
-            self.job_responsibilities = ""
-            self.job_preferred_requirement = ""
-
-        return self

@@ -17,7 +17,7 @@ def parse_docx(doc):
             continue
 
         paragraphs.append({
-            "id": f"{index}",
+            "sentence_id": f"{index}",
             "text": paragraph.text,
         })
     return paragraphs

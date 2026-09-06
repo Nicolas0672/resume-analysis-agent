@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI
 from backend.agent.model import InterviewDetailsWithEvidence, InvestigateOutput
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage
 
 async def investigate_candidate(state: AgentState):
     topic_id = state["topic_id_selection"]
@@ -17,26 +18,40 @@ async def investigate_candidate(state: AgentState):
     prompt = ChatPromptTemplate.from_messages([
         ("system",     
 """
-Your task is to investigate the current topic until the investigation
-objective can be answered with sufficient evidence. If determined that the candidate
-does not have enough required experience to confidently answer the objective, return a message to the user that more experience is needed
+Your task is to investigate the current topic until the investigation objective has sufficient evidence.
 
-Before asking another question, determine whether you already have
-enough information about:
-- what the candidate actually did
-- their personal ownership
-- relevant technical context
-- scope
-- outcomes/metrics when applicable
+Use the provided topic, reasoning, relevant experience, and objective to determine what information is missing.
 
-Do not ask for information that has already been established.
-Ask exactly one question at a time.
+The goal is to uncover genuine, concrete evidence that can later support strong resume bullet points. Prioritize the candidate's specific actions, ownership, technical approach, scope, challenges, outcomes, impact, and measurable results when available.
 
-If the objective has been sufficiently satisfied, stop investigating.
+Before asking each question:
+
+* Review the entire conversation history.
+* Identify what has already been established.
+* Identify the specific evidence gap.
+* Determine what missing information would most strengthen the evidence.
+
+Ask exactly ONE question at a time.
+
+Ask targeted questions that encourage specific, factual answers rather than broad descriptions. When relevant, probe for measurable impact, scale, outcomes, or metrics.
+
+Never assume, invent, or pressure the candidate to provide metrics or outcomes that do not exist.
+
+Do not ask for information that has already been established or repeatedly rephrase the same question.
+
+If the gap has been sufficiently addressed and there is enough evidence to support strong resume content, stop investigating.
+
+If the candidate cannot answer further or asks to end the investigation, stop asking questions and use the evidence already provided.
+
+The goal is to uncover meaningful, specific, and truthful evidence that can later be translated into strong resume content, not to exhaustively investigate the candidate.
 """),
     ("human", 
-     """conversation history: {conversation_history}, topic: {topic}, reasoning for investigation: {reason}, any relevant experience: {relevant_experience}
-        objective: {objective} and job requirement for context: {job_requirement}
+     """conversation history: {conversation_history}, 
+        topic: {topic}, 
+        reasoning for investigation: {reason}, 
+        any relevant experience: {relevant_experience}
+        objective: {objective}  
+        job requirement for context: {job_requirement}
      """)
     ])
 
@@ -52,15 +67,15 @@ If the objective has been sufficiently satisfied, stop investigating.
             interview_details=selected, evidence=response.evidence
         )
         return {
-            "investigation_messages": response.user_message,
+            "investigation_messages": [AIMessage(content=response.user_message)],
             "need_more_info": response.need_more_info,
-            "interview_details_with_evidence": updated_details,
-            "completed_topic_ids": topic_id
+            "interview_details_with_evidence": [updated_details],
+            "completed_topic_ids": [topic_id]
         }
 
 
     return {
-        "investigation_messages": response.user_message,
+        "investigation_messages": [AIMessage(content=response.user_message)],
         "need_more_info": response.need_more_info,
     }
     

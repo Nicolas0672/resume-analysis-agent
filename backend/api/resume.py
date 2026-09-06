@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import HttpUrl
-from backend.agent.graph import initialize_tailoring_session, resume_tailoring_session
+from backend.agent.graph import initialize_tailoring_session, resume_tailoring_session, get_session_state
 from backend.services.resume_analysis_service import process_resume_analysis
 
 router = APIRouter(prefix="/tailor")
@@ -47,4 +47,16 @@ async def chat(session_id: str = Form(...), user_message: str = Form(...), reque
     return {
         "message": "Message processed successfully",
         "ai_response": response
+    }
+
+@router.get("/session/{session_id}")
+async def get_session(session_id: str, request: Request = None):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    state = await get_session_state(session_id=session_id, request=request)
+
+    return {
+        "message": "Session state retrieved successfully",
+        "state": state
     }

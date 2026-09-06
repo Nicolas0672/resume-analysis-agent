@@ -12,5 +12,5 @@ async def validate_job_details(job_details):
     ])
 
     llm_structured = model.with_structured_output(JobDetails)
-    response = llm_structured.invoke(prompt.format_messages(job_details=job_details))
+    response = await llm_structured.ainvoke(prompt.format_messages(job_details=job_details))
     return response

@@ -1,6 +1,7 @@
 from langgraph.types import interrupt
 
 from backend.agent.state import AgentState
+from langchain_core.messages import HumanMessage
 
 def human_after_analysis(state: AgentState):
     decision = interrupt({
@@ -64,4 +65,20 @@ def human_after_interview_planner(state: AgentState):
         "topic_id_selection": decision,
         "proceed_to_tailor_resume": False
 
+    }
+
+def human_investigate_chat(state: AgentState):
+    answer = interrupt({
+        "stage": "investigation",
+        "type": "investigation_chat",
+        "message": (
+            state["investigation_messages"][-1].content
+            if state["investigation_messages"]
+            else "No previous conversation available as of current"
+        ),
+        "options": [],
+    })
+
+    return {
+        "investigation_messages": [HumanMessage(content=answer)]
     }

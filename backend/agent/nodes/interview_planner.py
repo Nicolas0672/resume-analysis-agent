@@ -5,12 +5,9 @@ from langchain_openai import ChatOpenAI
 
 
 async def interview_agent(state: AgentState):
-    gaps = state['gaps']
-    strengths = state['strengths']
-    resume_data = state['resume_data']
-    relevant_experience = state.get('relevant_experience', None)
-
-    fields = ["job_title", "job_preferred_requirement", "job_responsibilities", "job_requirements", "job_company"]
+    candidate_analysis = state.get('candidate_analysis', None)
+    
+    fields = ["job_title", "job_responsibilities", "job_requirements", "job_company"]
 
     job_details = state.get("job_details")
 
@@ -19,15 +16,12 @@ async def interview_agent(state: AgentState):
         for field in fields
     }
 
-    if selected["job_preferred_requirement"] is None:
-        selected["job_preferred_requirement"] = "No preferred requirements available"
-
     interview_planner_prompt = ChatPromptTemplate.from_messages([
         ("system",
     """
     You are an interview planning agent.
 
-    Use the job requirements, candidate resume, strengths, gaps, and relevant experience to create a focused interview investigation plan.
+    Use the job requirements, candidate analysis to create a focused interview investigation plan.
 
     For each meaningful gap or unclear requirement:
     - Determine whether it is worth investigating.
@@ -38,7 +32,6 @@ async def interview_agent(state: AgentState):
     - Consider transferable experience when deciding whether a gap is worth investigating.
 
     Do not invent or assume candidate experience, skills, metrics, or outcomes.
-    A gap means the resume does not provide sufficient evidence; it does not necessarily mean the candidate lacks the skill.
 
     Do not generate detailed interview questions yet. Define investigation targets that a human can select and pass to a focused interview agent.
 
@@ -54,24 +47,16 @@ async def interview_agent(state: AgentState):
     Job:
     {job_details}
 
-    Candidate strengths:
-    {strengths}
+    Candidate analysis:
+    {candidate_analysis}
 
-    Candidate gaps:
-    {gaps}
-
-    Relevant experience:
-    {relevant_experience}
-
-    Resume:
-    {resume_data}
     """)
     ])
 
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(InterviewPlan)
     response = await llm_structured.ainvoke(interview_planner_prompt.format_messages(
-        job_details=selected, strengths=strengths, gaps=gaps, relevant_experience=relevant_experience, resume_data=resume_data)
+        job_details=selected, candidate_analysis=candidate_analysis)
         )
     
     return {

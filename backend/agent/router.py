@@ -19,3 +19,11 @@ def route_investigation_or_tailoring(state: AgentState):
         return "proceed_to_tailor_resume"
     else:
         return "investigate_candidate"
+
+def route_after_tailoring(state: AgentState):
+    status = state.get("feedback_on_tailored_bullets", {}).overall_status
+
+    if status == "VALID":
+        return "done"
+    elif status == "INVALID":
+        return "tailor"
