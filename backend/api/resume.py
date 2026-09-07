@@ -22,7 +22,7 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(.
 
     ai_response =await initialize_tailoring_session(
         session_id=session_id,
-        parsed_resume=resume_data["parsed_resume"],
+        parsed_resume=resume_data["structured_resume"],
         job_details=resume_data["job_details"],
         candidate_profile_data=None,
         request=request

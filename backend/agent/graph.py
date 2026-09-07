@@ -8,7 +8,7 @@ from enum import Enum
 from backend.agent.nodes.human_decision import human_after_analysis, human_after_interview_planner, human_investigate_chat
 from backend.agent.nodes.interview import investigate_candidate
 from backend.agent.nodes.interview_planner import interview_agent
-from backend.agent.nodes.tailor_agent import critique_tailored_bullet_points, tailor_resume_bullet_points
+from backend.agent.nodes.tailor_agent import critique_tailored_bullet_points, evidence_mapper, tailor_resume_bullet_points
 from backend.agent.router import route_after_tailoring, route_investigation_or_tailoring, router_after_analysis, router_to_stop_investigation
 from backend.agent.state import AgentState
 from backend.agent.nodes.analyzation import analyze_candidate
@@ -24,7 +24,7 @@ class NodesNames(str, Enum):
     HUMAN_INVESTIGATE_CHAT = "human_investigate_chat"
     TAILOR_RESUME_BULLET_POINTS = "tailor_resume_bullet_points"
     CRITIQUE_TAILORED_BULLET_POINTS = "critique_tailored_bullet_points"
-
+    EVIDENCE_MAPPER = "evidence_mapper"
 # use for later
 candidate = {
     "candidate_id": "CAND-10482",
@@ -89,19 +89,19 @@ graph.add_node(NodesNames.INVESTIGATE_CANDIDATE, investigate_candidate)
 graph.add_node(NodesNames.HUMAN_INVESTIGATE_CHAT, human_investigate_chat)
 graph.add_node(NodesNames.TAILOR_RESUME_BULLET_POINTS, tailor_resume_bullet_points)
 graph.add_node(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, critique_tailored_bullet_points)
-
+graph.add_node(NodesNames.EVIDENCE_MAPPER, evidence_mapper)
 
 graph.add_edge(START, NodesNames.ANALYZE_CANDIDATE)
 graph.add_edge(NodesNames.ANALYZE_CANDIDATE, NodesNames.HUMAN_AFTER_ANALYSIS)
 graph.add_conditional_edges(NodesNames.HUMAN_AFTER_ANALYSIS, router_after_analysis, {
     "done": END,
     "need_more_info": NodesNames.INTERVIEW_PLANNER,
-    "tailor": NodesNames.TAILOR_RESUME_BULLET_POINTS # Tailor
+    "tailor": NodesNames.EVIDENCE_MAPPER # Tailor
 })
 
 graph.add_edge(NodesNames.INTERVIEW_PLANNER, NodesNames.HUMAN_AFTER_INTERVIEW_PLANNER)
 graph.add_conditional_edges(NodesNames.HUMAN_AFTER_INTERVIEW_PLANNER, route_investigation_or_tailoring, {
-    "proceed_to_tailor_resume": NodesNames.TAILOR_RESUME_BULLET_POINTS, ##
+    "proceed_to_tailor_resume": NodesNames.EVIDENCE_MAPPER, ##
     "investigate_candidate": NodesNames.INVESTIGATE_CANDIDATE
 })
 
@@ -111,12 +111,12 @@ graph.add_conditional_edges(NodesNames.INVESTIGATE_CANDIDATE, router_to_stop_inv
 })
 
 graph.add_edge(NodesNames.HUMAN_INVESTIGATE_CHAT, NodesNames.INVESTIGATE_CANDIDATE)
-graph.add_edge(NodesNames.TAILOR_RESUME_BULLET_POINTS, NodesNames.CRITIQUE_TAILORED_BULLET_POINTS)
+graph.add_edge(NodesNames.EVIDENCE_MAPPER, END)
 
-graph.add_conditional_edges(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, route_after_tailoring, {
-    "done": END,
-    "tailor": NodesNames.TAILOR_RESUME_BULLET_POINTS
-})
+# graph.add_conditional_edges(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, route_after_tailoring, {
+#     "done": END,
+#     "tailor": NodesNames.TAILOR_RESUME_BULLET_POINTS
+# })
 
 
 

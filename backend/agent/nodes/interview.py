@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
 
-from backend.agent.model import InterviewDetailsWithEvidence, InvestigateOutput
+from backend.agent.model import EvidenceWithDetails, InvestigateOutput
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage
@@ -15,6 +15,20 @@ async def investigate_candidate(state: AgentState):
         if item.topic_id == topic_id
     )
 
+    relevant_experience_from_resume = []
+
+    for relevant in selected.relevant_experience_from_resume:
+        entries = getattr(state["resume_data"], relevant.type)
+
+        entry = next(
+            (e for e in entries if e.entry_id == relevant.entry_id),
+            None
+        )
+
+        if entry:
+            relevant_experience_from_resume.append(entry)
+
+
     prompt = ChatPromptTemplate.from_messages([
         ("system",     
 """
@@ -23,6 +37,8 @@ Your task is to investigate the current topic until the investigation objective 
 Use the provided topic, reasoning, relevant experience, and objective to determine what information is missing.
 
 The goal is to uncover genuine, concrete evidence that can later support strong resume bullet points. Prioritize the candidate's specific actions, ownership, technical approach, scope, challenges, outcomes, impact, and measurable results when available.
+If the candidate mentions gaining relevant experience through work and is not specified from resume data, ensure to ask for the company, job title, job location and duration of employment from start to end or present if still employed.
+If the candidate mentions gaining relevant experience through a project and is not specified from resume data, ensure to ask for the project name.
 
 Before asking each question:
 
@@ -52,6 +68,7 @@ The goal is to uncover meaningful, specific, and truthful evidence that can late
         any relevant experience: {relevant_experience}
         objective: {objective}  
         job requirement for context: {job_requirement}
+        relevant experience from resume: {relevant_experience_from_resume}
      """)
     ])
 
@@ -59,17 +76,17 @@ The goal is to uncover meaningful, specific, and truthful evidence that can late
     llm_structured = model.with_structured_output(InvestigateOutput)
     response = await llm_structured.ainvoke(prompt.format_messages(
         topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
-        objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history
+        objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history, relevant_experience_from_resume=relevant_experience_from_resume
         ))
     
     if response.need_more_info == False:
-        updated_details = InterviewDetailsWithEvidence(
-            interview_details=selected, evidence=response.evidence
+        updated_details = EvidenceWithDetails(
+            job_requirement=selected.job_requirement, topic_id=selected.topic_id, evidence=response.evidence
         )
         return {
             "investigation_messages": [AIMessage(content=response.user_message)],
             "need_more_info": response.need_more_info,
-            "interview_details_with_evidence": [updated_details],
+            "evidence_with_details": [updated_details],
             "completed_topic_ids": [topic_id]
         }
 

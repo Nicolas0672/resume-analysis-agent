@@ -16,6 +16,10 @@ async def interview_agent(state: AgentState):
         for field in fields
     }
 
+    resume_work_experience = state["resume_data"].work_experience
+    resume_project = state["resume_data"].projects
+    resume_leadership = state["resume_data"].leadership 
+
     interview_planner_prompt = ChatPromptTemplate.from_messages([
         ("system",
     """
@@ -50,13 +54,22 @@ async def interview_agent(state: AgentState):
     Candidate analysis:
     {candidate_analysis}
 
+    Candidate work resume experience:
+    {resume_work_experience}
+
+    Candidate project resume experience:
+    {resume_project}
+
+    Candidate leadership resume experience:
+    {resume_leadership}
+
     """)
     ])
 
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(InterviewPlan)
     response = await llm_structured.ainvoke(interview_planner_prompt.format_messages(
-        job_details=selected, candidate_analysis=candidate_analysis)
+        job_details=selected, candidate_analysis=candidate_analysis, resume_work_experience=resume_work_experience, resume_leadership=resume_leadership, resume_project=resume_project)
         )
     
     return {
