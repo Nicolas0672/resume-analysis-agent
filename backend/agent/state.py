@@ -4,7 +4,7 @@ from typing import Annotated, List, Literal, Optional, Sequence, TypedDict
 from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
 
-from backend.agent.model import CandidateAnalysis, Evidence, EvidenceMappingResult, EvidenceWithDetails, FeedbackOnTailoredBullets, InterviewPlan, TailoredBullets
+from backend.agent.model import CandidateAnalysis, Evidence, EvidenceMappingResult, EvidenceWithDetails,InterviewPlan, TailorAnalysis
 from backend.model.job_pydantic import JobDetails, ResumeStructure
 
 class AgentState(TypedDict):
@@ -20,7 +20,7 @@ class AgentState(TypedDict):
     strengths: list[str]
     gaps: list[str]
 
-    interview_plan: List[InterviewPlan]
+    interview_plan: InterviewPlan
 
     topic_id_selection: str
     need_more_info: bool
@@ -30,11 +30,10 @@ class AgentState(TypedDict):
 
     investigation_messages: Annotated[Sequence[BaseMessage], add_messages]
     evidence_with_details: Annotated[list[EvidenceWithDetails], add]
-
-    tailored_bullets: List[TailoredBullets]
-    feedback_on_tailored_bullets: FeedbackOnTailoredBullets | None
     
     evidence_mapping: EvidenceMappingResult
+
+    tailor_analysis: TailorAnalysis
 
     
 

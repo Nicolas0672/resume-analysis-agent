@@ -8,7 +8,7 @@ from backend.services.resume_analysis_service import process_resume_analysis
 router = APIRouter(prefix="/tailor")
 
 @router.post("/upload")
-async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(...), request: Request = None):
+async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl | None = Form(None), job_description: str | None = Form(None), request: Request = None):
     if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a DOCX file.")
 
@@ -18,20 +18,28 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl = Form(.
     session_id = str(uuid.uuid4())
     
     file_bytes = await file.read()
-    resume_data = await process_resume_analysis(file_bytes, str(job_link))
+    resume_data = await process_resume_analysis(file_bytes=file_bytes, job_url=str(job_link), job_description=job_description)
 
-    ai_response =await initialize_tailoring_session(
+    if not resume_data["success"]:
+        return {
+            "success": False,
+            "requires_job_description": resume_data["requires_job_description"],
+            "error": resume_data["error"],
+            "session_id": session_id,
+        }
+
+    ai_response = await initialize_tailoring_session(
         session_id=session_id,
         parsed_resume=resume_data["structured_resume"],
         job_details=resume_data["job_details"],
         candidate_profile_data=None,
-        request=request
+        request=request,
     )
 
     return {
-        "message": "Resume processed successfully",
+        "success": True,
         "session_id": session_id,
-        "ai_response": ai_response
+        "ai_response": ai_response,
     }
 
 @router.post("/chat")

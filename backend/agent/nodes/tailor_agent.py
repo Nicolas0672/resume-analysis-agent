@@ -1,4 +1,4 @@
-from backend.agent.model import EvidenceMappingResult, FeedbackOnTailoredBullets, TailoredBullets
+from backend.agent.model import EvidenceMappingResult, ResumeReference, TailorAnalysis, TailorMatched, TailorUnmatched
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -9,6 +9,7 @@ async def evidence_mapper(state: AgentState):
     evidence_list = state["evidence_with_details"]
     resume_experience = state["resume_data"].work_experience
     resume_projects = state["resume_data"].projects
+    resume_leadership = state["resume_data"].leadership if state["resume_data"].leadership else "No available leadership experience"
 
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -49,6 +50,9 @@ async def evidence_mapper(state: AgentState):
     Resume projects:
     {resume_projects}
 
+    Resume leadership:
+    {resume_leadership}
+
     Map each evidence item to the appropriate resume entry and related bullet(s).
     """
         )
@@ -56,7 +60,10 @@ async def evidence_mapper(state: AgentState):
 
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(EvidenceMappingResult)
-    response = await llm_structured.ainvoke(prompt.format_messages(resume_experience=resume_experience, resume_projects=resume_projects, evidence_list=evidence_list))
+    response = await llm_structured.ainvoke(prompt.format_messages(
+        resume_experience=resume_experience, resume_projects=resume_projects, evidence_list=evidence_list,
+        resume_leadership=resume_leadership
+        ))
 
     return {
         "evidence_mapping": response
@@ -74,11 +81,11 @@ async def tailor_resume_bullet_points(state: AgentState):
     matched = []
     unmatched = []
 
-    for current in evidence_mapping:
+    for current in evidence_mapping.evidence_mappings:
         entry_id = current.resume_reference.entry_id
         type = current.resume_reference.type
 
-        entries = getattr(state["resume_data"], type)
+        entries = getattr(state["resume_data"], type, [])
         entry = next(
             (e for e in entries if e.entry_id == entry_id),
             None
@@ -87,13 +94,15 @@ async def tailor_resume_bullet_points(state: AgentState):
         if current.mapping_status == "MATCHED":
             matched.append({
                 "evidence_with_details": current.evidence_with_details,
-                "resume_entry": entry
+                "resume_entry": entry,
+                "resume_reference": ResumeReference(type=type, entry_id=entry_id)
             })
 
         if current.mapping_status == "UNMATCHED":
             unmatched.append({
                 "evidence_with_details": current.evidence_with_details,
-                "resume_entry": entry
+                "resume_entry": entry,
+                "resume_reference": ResumeReference(type=type, entry_id=entry_id)               
             })           
 
 
@@ -105,6 +114,7 @@ async def tailor_resume_bullet_points(state: AgentState):
 
     Your job is to improve an existing resume experience using verified evidence
     that belongs to that exact experience.
+    You are allowed to change or add multiple bullet points from the resume entry.
 
     For each mapped experience, decide whether to KEEP, MODIFY, or ADD.
 
@@ -124,7 +134,11 @@ async def tailor_resume_bullet_points(state: AgentState):
     candidate's experience.
     - Prefer a strong existing bullet over an unnecessary rewrite.
     - When modifying or adding new bullet point, always prioritize using the XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
+    - For every matched candidate, return the resume_reference exactly as provided
+    in the input. It is an identifier, not a value to generate.
 
+    Do not modify, infer, normalize, or create a new resume_reference.
+    Copy the input resume_reference exactly.
     """
         ),
         (
@@ -146,6 +160,9 @@ async def tailor_resume_bullet_points(state: AgentState):
     The provided evidence describes a legitimate candidate experience that is not
     currently represented on the resume. Your job is to create a new resume
     experience or project entry from that evidence.
+
+    You are allowed to add multiple bullet points backed by evidence from candidate to align with
+    job requirement
 
     Rules:
     - This is an ADD operation.
@@ -172,9 +189,30 @@ async def tailor_resume_bullet_points(state: AgentState):
         )
     ])
     model = ChatOpenAI(model="gpt-4o")
-    llm_matched_structured = 
+    llm_matched_structured = model.with_structured_output(TailorMatched)
+    llm_unmatched_structured = model.with_structured_output(TailorUnmatched)
+
+    matched_result = None
+    unmatched_result = None
+
+    if matched:
+        matched_result = await llm_matched_structured.ainvoke(matched_prompt.format_messages(
+            matched=matched
+        ))
+
+    if unmatched:
+        unmatched_result = await llm_unmatched_structured.ainvoke(new_experience_prompt.format_messages(
+            unmatched=unmatched
+        ))
+
+    
+
+    tailor_analysis = TailorAnalysis(
+        tailor_matched=matched_result, tailor_unmatched=unmatched_result
+    )
+
     return {
-        "tailored_bullets": response
+        "tailor_analysis": tailor_analysis
     }
 
 

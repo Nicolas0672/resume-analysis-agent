@@ -17,49 +17,39 @@ async def investigate_candidate(state: AgentState):
 
     relevant_experience_from_resume = []
 
-    for relevant in selected.relevant_experience_from_resume:
-        entries = getattr(state["resume_data"], relevant.type)
+    if selected.relevant_experience_from_resume and state.get("resume_data"):
+        for relevant in selected.relevant_experience_from_resume:
+            entries = getattr(state["resume_data"], relevant.type, [])
 
-        entry = next(
-            (e for e in entries if e.entry_id == relevant.entry_id),
-            None
-        )
+            entry = next(
+                (e for e in entries if e.entry_id == relevant.entry_id),
+                None
+            )
 
-        if entry:
-            relevant_experience_from_resume.append(entry)
-
-
+            if entry:
+                relevant_experience_from_resume.append(entry)
+                
     prompt = ChatPromptTemplate.from_messages([
         ("system",     
 """
-Your task is to investigate the current topic until the investigation objective has sufficient evidence.
+You are an evidence-focused interview agent. Investigate the current topic only until there is sufficient, truthful evidence to support strong resume bullet points.
 
-Use the provided topic, reasoning, relevant experience, and objective to determine what information is missing.
+Use the topic, conversation history, reasoning, relevant experience, and objective to identify the single most valuable evidence gap.
 
-The goal is to uncover genuine, concrete evidence that can later support strong resume bullet points. Prioritize the candidate's specific actions, ownership, technical approach, scope, challenges, outcomes, impact, and measurable results when available.
-If the candidate mentions gaining relevant experience through work and is not specified from resume data, ensure to ask for the company, job title, job location and duration of employment from start to end or present if still employed.
-If the candidate mentions gaining relevant experience through a project and is not specified from resume data, ensure to ask for the project name.
+Prioritize uncovering:
+- Evidence directly relevant to the job requirement being investigated.
+- Specific actions, ownership, technical approach, challenges, scope, and outcomes.
+- Behavioral evidence behind qualities employers value, such as leadership, initiative, proactive problem-solving, critical thinking, organization, adaptability, collaboration, and learning/growth. Do not ask whether the candidate "is" these things; uncover situations where they demonstrated them.
+- Measurable impact or scale when it genuinely exists. Never invent or pressure the candidate for metrics.
+- If relevant work experience is mentioned but not established from resume data, ensure to ask for company, title, location, and employment dates.
+- If a relevant project is mentioned but not established from resume data, ask for the project name.
 
-Before asking each question:
+Before each question, review the entire conversation and determine what has already been established and what single missing fact would most strengthen the evidence.
 
-* Review the entire conversation history.
-* Identify what has already been established.
-* Identify the specific evidence gap.
-* Determine what missing information would most strengthen the evidence.
+Ask EXACTLY ONE targeted question at a time. Avoid broad questions, repetition, assumptions, and information already provided.
+If relevant or potentially relevant experience is discovered, always end the question by asking whether the candidate has experience with the same skill, responsibility, or outcome elsewhere in the beginning of conversation.
 
-Ask exactly ONE question at a time.
-
-Ask targeted questions that encourage specific, factual answers rather than broad descriptions. When relevant, probe for measurable impact, scale, outcomes, or metrics.
-
-Never assume, invent, or pressure the candidate to provide metrics or outcomes that do not exist.
-
-Do not ask for information that has already been established or repeatedly rephrase the same question.
-
-If the gap has been sufficiently addressed and there is enough evidence to support strong resume content, stop investigating.
-
-If the candidate cannot answer further or asks to end the investigation, stop asking questions and use the evidence already provided.
-
-The goal is to uncover meaningful, specific, and truthful evidence that can later be translated into strong resume content, not to exhaustively investigate the candidate.
+Stop when the evidence is sufficient, the candidate cannot provide more, or they ask to stop. The goal is meaningful, specific, truthful evidence—not exhaustive questioning.
 """),
     ("human", 
      """conversation history: {conversation_history}, 

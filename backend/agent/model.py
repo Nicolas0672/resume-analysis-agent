@@ -50,12 +50,12 @@ class InterviewPlan(BaseModel):
 
 class Evidence(BaseModel):
     project_name: Optional[str]
-    experience_found: Optional[str]
+    experience_found: Optional[list[str]]
     technologies: Optional[list[str]]
-    ownership: Optional[str]
-    scope: Optional[str]
-    metrics: Optional[str]
-    impact: Optional[str]
+    ownership: Optional[list[str]]
+    scope: Optional[list[str]]
+    metrics: Optional[list[str]]
+    impact: Optional[list[str]]
     company: Optional[str]
     job_title: Optional[str]
     job_location: Optional[str]
@@ -80,16 +80,33 @@ class EvidenceMapping(BaseModel):
 class EvidenceMappingResult(BaseModel):
     evidence_mappings: List[EvidenceMapping]
 
-class TailorAnalysis(BaseModel):
-    next_action: Literal["KEEP", "MODIFY", "ADD"] 
+
+class TailorMatched(BaseModel):
+    next_action: Literal["KEEP", "MODIFY", "ADD"]
     old_bullet_points: Optional[list[ResumeBullet]]
-    new_bullet_points: list[ResumeBullet]
+    new_bullet_points: Optional[list[ResumeBullet]]
     reasoning: str
-    evidence: str = Field(description="Supporting evidence backed up by real data")
+    evidence: list[str]
+    resume_reference: ResumeReference = Field(
+        description=(
+            "Copy the resume_reference from the input exactly. "
+            "This is an immutable identifier. Never modify or generate it."
+        )
+    )
+class TailorUnmatched(BaseModel):
+    next_action: Literal["ADD"] 
+    new_bullet_points: list[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
+    company_name: Optional[str] = Field("Company name if experience learned from work. Otherwise return None")
+    duration: Optional[str] = Field("Duration of work experience if provided. Example: Dec 2024 - Present")
+    job_title: Optional[str] = Field("Job title at company if experienced learned from work. Otherwise return None")
+    skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
+    project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
+    reasoning: str
+    evidence: list[str] = Field(description="Supporting evidence backed up by real data")
 
-
-
-
+class TailorAnalysis(BaseModel):
+    tailor_matched: TailorMatched | None
+    tailor_unmatched: TailorUnmatched | None
 
 
 

@@ -111,7 +111,8 @@ graph.add_conditional_edges(NodesNames.INVESTIGATE_CANDIDATE, router_to_stop_inv
 })
 
 graph.add_edge(NodesNames.HUMAN_INVESTIGATE_CHAT, NodesNames.INVESTIGATE_CANDIDATE)
-graph.add_edge(NodesNames.EVIDENCE_MAPPER, END)
+graph.add_edge(NodesNames.EVIDENCE_MAPPER, NodesNames.TAILOR_RESUME_BULLET_POINTS)
+graph.set_finish_point(NodesNames.TAILOR_RESUME_BULLET_POINTS)
 
 # graph.add_conditional_edges(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, route_after_tailoring, {
 #     "done": END,
@@ -163,7 +164,7 @@ async def get_session_state(session_id: str, request: Request = None):
 
     state = await graph_with_memory.aget_state(config)
 
-    return state
+    return normalize_graph_response(state)
 
 
 
@@ -176,7 +177,6 @@ def normalize_graph_response(result):
         value = interrupt.value
 
         return {
-            "stage": value.get("stage", "unknown"),
             "interrupt": {
                 "type": value["type"],
                 "message": value["message"],

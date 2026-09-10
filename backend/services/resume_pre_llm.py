@@ -15,7 +15,7 @@ async def validate_job_details(job_details):
     response = await llm_structured.ainvoke(prompt.format_messages(job_details=job_details))
     return response
 
-async def structure_resume_date(resume_data):
+async def structure_resume_data(resume_data):
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a resume data structuring agent. If the resume data is valid, return a JSON object. Do not change the resume data. Only use resume data provided"),
         ("user", "Validate the following resume data and return a JSON object if valid. Here are the resume data: {resume_data}")

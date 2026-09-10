@@ -30,9 +30,8 @@ class JobDetails(BaseModel):
 
 
 class ResumeBullet(BaseModel):
-    bullet_id: str
     text: str
-    sentence_ids: str
+    sentence_id: str
 
 
 class ResumeExperience(BaseModel):
@@ -69,19 +68,15 @@ class ResumeEducation(BaseModel):
 
 class ResumeProject(BaseModel):
     entry_id: str
-
     project_name: Optional[str] = None
     technologies: Optional[list[str]] = None
-
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 
 class ResumeCertification(BaseModel):
     entry_id: str
-
     name: str
     date: Optional[str] = None
-
     sentence_ids: list[str] = Field(default_factory=list)
 
 
