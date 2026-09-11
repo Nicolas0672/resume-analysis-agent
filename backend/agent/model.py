@@ -33,7 +33,7 @@ class ResumeReference(BaseModel):
 class InterviewDetails(BaseModel):
     topic_id: str = Field(description="Unique identifier for topic")
     priority: Literal["Low", "Medium", "High"]
-    relevant_experience: list[str]
+    relevant_experience: list[str] = Field(description="Relevant experience from candidate profile data. Do not mesh experience together that are from different sections")
     relevant_experience_from_resume: Optional[list[ResumeReference]] = Field(
         description=(
             "References to the complete resume entries relevant to this topic. "
@@ -93,20 +93,58 @@ class TailorMatched(BaseModel):
             "This is an immutable identifier. Never modify or generate it."
         )
     )
+    topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
+
 class TailorUnmatched(BaseModel):
     next_action: Literal["ADD"] 
     new_bullet_points: list[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
     company_name: Optional[str] = Field("Company name if experience learned from work. Otherwise return None")
     duration: Optional[str] = Field("Duration of work experience if provided. Example: Dec 2024 - Present")
+    job_location: Optional[str]
     job_title: Optional[str] = Field("Job title at company if experienced learned from work. Otherwise return None")
     skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
     project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
     reasoning: str
     evidence: list[str] = Field(description="Supporting evidence backed up by real data")
+    topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
+
+class TailorMatchList(BaseModel):
+    tailor_matched: List[TailorMatched]
+
+class TailorUnmatchedList(BaseModel):
+    tailor_unmatched: List[TailorUnmatched]
 
 class TailorAnalysis(BaseModel):
-    tailor_matched: TailorMatched | None
-    tailor_unmatched: TailorUnmatched | None
+    tailor_matched_list: list[TailorMatched] = []
+    tailor_unmatched_list: list[TailorUnmatched] = []
+
+class Feedback(BaseModel):
+    valid: bool = Field(
+        description="Whether the proposed bullet is factually supported by the candidate's evidence."
+    )
+
+    suggestions: str = Field(
+        description="If invalid, identify the specific claim that is unsupported or missing evidence, state that the claim must be removed or corrected, and explain which evidence limitation makes it inaccurate. If valid, state that no factual correction is required."
+    )
+
+    topic_id: str = Field(
+        description="The topic ID associated with the evidence used to evaluate this bullet."
+    )
+
+class RegeneratedBullets(BaseModel):
+    topic_id: str
+    new_bullet_points: list[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
+    reasoning: str
+
+class Feedbacks(BaseModel):
+    feedbacks: List[Feedback]
+
+class RegeneratedBulletsList(BaseModel):
+    regenerated_bullet_list: List[RegeneratedBullets]
+
+
+
+
 
 
 

@@ -12,8 +12,8 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl | None =
     if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a DOCX file.")
 
-    if not job_link:
-        raise HTTPException(status_code=400, detail="Only HTTP and HTTPS URLs are allowed")
+    if not job_link and not job_description:
+        raise HTTPException(status_code=400, detail="Please provide either a job URL or a job description.")
     
     session_id = str(uuid.uuid4())
     
@@ -40,6 +40,9 @@ async def upload_resume(file: UploadFile = File(...), job_link: HttpUrl | None =
         "success": True,
         "session_id": session_id,
         "ai_response": ai_response,
+        "requires_job_description": resume_data["requires_job_description"],
+        "job_details": resume_data["job_details"],
+        "resume_data": resume_data["structured_resume"],
     }
 
 @router.post("/chat")

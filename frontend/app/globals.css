@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Ensure all clickable buttons and button-like elements show pointer on hover */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Disabled buttons show not-allowed and turn grey */
+button:disabled,
+button[disabled],
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
+  background-color: #9ca3af !important;
+  color: #f4f4f5 !important;
+  border-color: #9ca3af !important;
+  box-shadow: none !important;
+  opacity: 0.75 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  button:disabled,
+  button[disabled],
+  [aria-disabled="true"] {
+    background-color: #52525b !important;
+    color: #d4d4d8 !important;
+    border-color: #52525b !important;
+    box-shadow: none !important;
+    opacity: 0.7 !important;
+  }
+}

@@ -27,3 +27,11 @@ def route_after_tailoring(state: AgentState):
         return "done"
     elif status == "INVALID":
         return "tailor"
+
+def router_to_generate(state: AgentState):
+    feedbacks = state["feedbacks"].feedbacks
+
+    if any(not feedback.valid for feedback in feedbacks):
+        return "regenerate"
+    else:
+        return "done"

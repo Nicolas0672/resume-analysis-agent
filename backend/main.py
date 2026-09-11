@@ -13,16 +13,6 @@ from fastapi import FastAPI
 from backend.api.resume import router as resume_router
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],            # GET, POST, etc.
-    allow_headers=["*"],            # all headers
-)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncSqliteSaver.from_conn_string(
@@ -34,5 +24,13 @@ async def lifespan(app: FastAPI):
         yield
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],            # GET, POST, etc.
+    allow_headers=["*"],            # all headers
+)
 
 app.include_router(resume_router)
