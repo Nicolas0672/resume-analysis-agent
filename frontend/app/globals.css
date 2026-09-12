@@ -32,26 +32,9 @@ button:not(:disabled),
   cursor: pointer;
 }
 
-/* Disabled buttons show not-allowed and turn grey */
+/* Disabled buttons show not-allowed cursor */
 button:disabled,
 button[disabled],
 [aria-disabled="true"] {
   cursor: not-allowed !important;
-  background-color: #9ca3af !important;
-  color: #f4f4f5 !important;
-  border-color: #9ca3af !important;
-  box-shadow: none !important;
-  opacity: 0.75 !important;
-}
-
-@media (prefers-color-scheme: dark) {
-  button:disabled,
-  button[disabled],
-  [aria-disabled="true"] {
-    background-color: #52525b !important;
-    color: #d4d4d8 !important;
-    border-color: #52525b !important;
-    box-shadow: none !important;
-    opacity: 0.7 !important;
-  }
 }

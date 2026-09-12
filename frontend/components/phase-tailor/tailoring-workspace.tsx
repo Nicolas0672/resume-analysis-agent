@@ -12,6 +12,7 @@ import {
   TailorUnmatched,
 } from "@/lib/types";
 import { ProposalDecision } from "@/hooks/use-tailoring-session";
+import { useRotatingPhrase } from "@/hooks/use-rotating-phrase";
 import {
   CheckCircle2,
   XCircle,
@@ -51,6 +52,7 @@ export function TailoringWorkspace({
   onDecideProposal,
   onFinishReview,
 }: TailoringWorkspaceProps) {
+  const rotatingPhrase = useRotatingPhrase(isSynthesizing);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [customTextDraft, setCustomTextDraft] = useState("");
@@ -199,8 +201,8 @@ export function TailoringWorkspace({
         </div>
 
         <div>
-          <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-            Formulating & Fact-Checking Bullet Points...
+          <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 min-h-[2rem] transition-all">
+            {rotatingPhrase}
           </h3>
           <p className="text-xs text-zinc-500 mt-2 max-w-md mx-auto">
             Our agent maps verified evidence to your resume, structures high-impact XYZ bullets, and runs a factuality critic to eliminate hallucinations.
@@ -218,7 +220,7 @@ export function TailoringWorkspace({
           </div>
           <div className="flex items-center gap-2.5 text-zinc-900 dark:text-zinc-100 font-medium">
             <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400" />
-            <span>Running Factuality Critic against interview evidence...</span>
+            <span>{rotatingPhrase}</span>
           </div>
         </div>
       </div>

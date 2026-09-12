@@ -10,6 +10,7 @@ import {
   JobDetails,
 } from "@/lib/types";
 import { ChatMessage } from "@/hooks/use-tailoring-session";
+import { useRotatingPhrase, SYNTHESIZING_PHRASES } from "@/hooks/use-rotating-phrase";
 import {
   CheckCircle2,
   AlertCircle,
@@ -60,6 +61,8 @@ export function InterviewWorkspace({
   const [showJobDrawer, setShowJobDrawer] = useState(false);
   const [selectedTopicPending, setSelectedTopicPending] = useState<string | null>(null);
   const [isProceeding, setIsProceeding] = useState<boolean>(false);
+
+  const synthesizingPhrase = useRotatingPhrase(SYNTHESIZING_PHRASES, isProceeding);
 
   useEffect(() => {
     if (!isLoading) {
@@ -320,13 +323,20 @@ export function InterviewWorkspace({
               </button>
 
               {showStrengths && (
-                <div className="mt-2.5 space-y-1 max-h-36 overflow-y-auto text-[11px] text-zinc-600 dark:text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                  {candidateAnalysis.strengths.map((str, idx) => (
-                    <div key={idx} className="flex items-start gap-1.5">
-                      <span className="text-emerald-500">•</span>
-                      <span>{str}</span>
-                    </div>
-                  ))}
+                <div className="mt-2.5 space-y-2 max-h-48 overflow-y-auto text-[11px] text-zinc-600 dark:text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                  {candidateAnalysis.strengths.map((str, idx) => {
+                    const req = typeof str === "string" ? str : str.requirement;
+                    const expl = typeof str === "string" ? "" : str.explanation;
+                    return (
+                      <div key={idx} className="flex items-start gap-1.5">
+                        <span className="text-emerald-500 mt-0.5 shrink-0">•</span>
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">{req}</span>
+                          {expl && <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-tight">{expl}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -355,10 +365,16 @@ export function InterviewWorkspace({
                   <button
                     onClick={handleProceedClick}
                     disabled={isLoading || isProceeding}
-                    className="cursor-pointer text-xs font-medium text-zinc-600 hover:text-zinc-900 disabled:text-zinc-400 disabled:cursor-not-allowed dark:text-zinc-400 dark:hover:text-zinc-200 underline decoration-zinc-300 flex items-center gap-1"
+                    className="cursor-pointer text-xs font-medium text-zinc-600 hover:text-zinc-900 disabled:text-zinc-400 disabled:cursor-not-allowed dark:text-zinc-400 dark:hover:text-zinc-200 underline decoration-zinc-300 flex items-center gap-1.5"
                   >
-                    {isProceeding && <Loader2 className="h-3 w-3 animate-spin" />}
-                    <span>Finish Interview & Tailor →</span>
+                    {isProceeding ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin text-emerald-500" />
+                        <span className="font-medium animate-fade-in">{synthesizingPhrase}</span>
+                      </>
+                    ) : (
+                      <span>Finish Interview & Tailor →</span>
+                    )}
                   </button>
                 </div>
 
@@ -426,7 +442,7 @@ export function InterviewWorkspace({
                     type="button"
                     onClick={handlePreFillSkip}
                     disabled={isLoading}
-                    className="cursor-pointer text-amber-700 hover:text-amber-800 disabled:text-zinc-400 disabled:cursor-not-allowed dark:text-amber-400 font-medium underline"
+                    className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-amber-700 dark:text-amber-400 font-medium text-xs"
                   >
                     I lack this experience
                   </button>
@@ -455,12 +471,12 @@ export function InterviewWorkspace({
                     <button
                       type="submit"
                       disabled={isLoading || !answerInput.trim()}
-                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-zinc-400 disabled:text-zinc-200 disabled:border-zinc-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-all"
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-500 disabled:border-zinc-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-400 transition-all"
                     >
                       {isLoading ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Evaluating...</span>
+                          <span>Evaluating Response...</span>
                         </>
                       ) : (
                         <>
@@ -556,12 +572,12 @@ export function InterviewWorkspace({
                 <button
                   onClick={handleProceedClick}
                   disabled={isLoading || isProceeding}
-                  className="cursor-pointer w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-zinc-800 disabled:bg-zinc-400 disabled:text-zinc-200 disabled:border-zinc-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-all"
+                  className="cursor-pointer w-full sm:w-auto inline-flex items-center justify-center gap-2.5 rounded-xl bg-zinc-900 px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-zinc-800 disabled:bg-zinc-800 disabled:text-zinc-100 disabled:border-zinc-700 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-200 transition-all"
                 >
                   {isProceeding ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Synthesizing Tailored Bullets...</span>
+                      <Loader2 className="h-4 w-4 animate-spin text-emerald-400 shrink-0" />
+                      <span className="font-medium animate-fade-in text-white dark:text-zinc-100">{synthesizingPhrase}</span>
                     </>
                   ) : (
                     <>

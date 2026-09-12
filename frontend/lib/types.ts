@@ -76,11 +76,26 @@ export interface ResumeStructure {
   skills?: ResumeSkills | null;
 }
 
+export interface CandidateStrength {
+  requirement: string;
+  evidence: string[];
+  explanation: string;
+}
+
+export type CandidateGapStatus = "missing" | "partial" | "unclear" | "transferable";
+
+export interface CandidateGap {
+  requirement: string;
+  status: CandidateGapStatus;
+  evidence?: string[] | null;
+  gap: string;
+}
+
 export interface CandidateAnalysis {
   score: "weak match" | "good match" | "strong match";
   relevant_experience?: string | null;
-  strengths?: string[] | null;
-  gaps?: string[] | null;
+  strengths?: Array<CandidateStrength | string> | null;
+  gaps?: Array<CandidateGap | string> | null;
   user_message: string;
 }
 

@@ -4,25 +4,28 @@ from pydantic import BaseModel, Field
 
 from backend.model.job_pydantic import ResumeBullet
 
-# EXPAND field to provide more context based on resume data
-class CandidateAnalysis(BaseModel):
-    score: Literal["weak match", "good match", "strong match"] = Field(description=
-"""
-Overall fit based on ALL job requirements. Be strict and evidence-based. Strong experience in a few areas does not compensate for multiple missing hard requirements.
-""")
-    relevant_experience: Optional[str] = Field(description="Relevant experience from candidate's profile that closely matches the job description. If no relevant experience is found, this field will be None")
-    strengths: Optional[list[str]] = Field(description="Confirmed matches, including technical skills, tools, platforms, domain knowledge, experience, education, coursework, and relevant soft skills when explicitly supported.")
-    gaps: Optional[list[str]] = Field(description=
-"""
-Identify meaningful evidence gaps in the candidate's qualifications, skills, experience, or background relative to the job requirements.
-A gap should also identify cases where the candidate has relevant experience, but important evidence is missing or unclear. For example: "Candidate worked on Project A, which is relevant to X requirement, but their specific contribution/impact/metrics are unclear."
-Focus on missing or unclear responsibilities, technical details, scope, impact, outcomes, metrics, or relevance.
-Do not identify gaps related to work authorization, citizenship, availability, timing, eligibility, or semester-remaining requirements.
-Do not include redundant or overlapping gaps. Each gap must represent a distinct deficiency.
-If no meaningful gaps are found, return an empty list.
-""")
-    user_message: str = Field(description="A message to the user providing insights on the candidate's resume and relevant experience.")
+class CandidateStrength(BaseModel):
+    requirement: str
+    evidence: list[str]
+    explanation: str
 
+
+class CandidateGap(BaseModel):
+    requirement: str
+    status: Literal["missing", "partial", "unclear", "transferable"]
+    evidence: Optional[list[str]]
+    gap: str
+
+class CandidateAnalysis(BaseModel):
+    score: Literal["weak match", "good match", "strong match"]
+
+    relevant_experience: Optional[str]
+
+    strengths: Optional[list[CandidateStrength]]
+
+    gaps: Optional[list[CandidateGap]]
+
+    user_message: str
 
 class ResumeReference(BaseModel):
     type: Literal["projects", "work_experience", "leadership"]
@@ -86,21 +89,57 @@ class InterviewPlan(BaseModel):
     interview_plan: List[InterviewDetails]
 
 class Evidence(BaseModel):
-    project_name: str = Field(description="If not provided from user, create one using context")
-    experience_found: Optional[list[str]]
-    technologies: Optional[list[str]]
-    ownership: Optional[list[str]]
-    scope: Optional[list[str]]
-    metrics: Optional[list[str]]
-    impact: Optional[list[str]]
-    company: Optional[str]
-    job_title: Optional[str]
-    job_location: Optional[str]
-    duration: Optional[str]
+    project_name: str = Field(
+        description="Name of the project or experience. If the candidate does not provide a name, create a concise name using only established context."
+    )
+
+    experience_found: Optional[list[str]] = Field(
+        default=None,
+        description="Concrete experiences, actions, responsibilities, or accomplishments discovered during the interview."
+    )
+
+    technologies: Optional[list[str]] = Field(
+        default=None,
+        description="Technologies, tools, frameworks, languages, or technical methods explicitly mentioned by the candidate."
+    )
+
+    ownership: Optional[list[str]] = Field(
+        default=None,
+        description="What the candidate personally owned, initiated, designed, implemented, or was responsible for."
+    )
+
+    scope: Optional[list[str]] = Field(
+        default=None,
+        description="Concrete scale or context of the work, such as users, teams, systems, programs, workload, or responsibilities."
+    )
+
+    metrics: Optional[list[str]] = Field(
+        default=None,
+        description="Quantitative evidence explicitly provided by the candidate. Never infer, estimate, or manufacture metrics."
+    )
+
+    impact: Optional[list[str]] = Field(
+        default=None,
+        description="Concrete outcomes or changes resulting from the candidate's work, using only evidence established by the candidate."
+    )
+
+    motivation: Optional[list[str]] = Field(
+        default=None,
+        description="Candidate-stated motivations, reasons, interests, or decisions that explain why they pursued or cared about the experience."
+    )
+
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+    job_location: Optional[str] = None
+    duration: Optional[str] = None
+
     candidate_statements: Optional[list[str]] = Field(
-    default=None,
-    description="Original statements from the candidate that directly support the extracted evidence. Preserve the candidate's wording without adding interpretation or unsupported details."
-)
+        default=None,
+        description=(
+            "Original statements from the candidate that directly support the extracted evidence. "
+            "Preserve the candidate's wording without adding interpretation or unsupported details."
+        )
+    )
 
 class InvestigateOutput(BaseModel):
     need_more_info: bool = Field(description="If more context is needed to investigate candidate experience, return True, else False")
@@ -121,13 +160,15 @@ class EvidenceMapping(BaseModel):
 class EvidenceMappingResult(BaseModel):
     evidence_mappings: List[EvidenceMapping]
 
-
-class TailorMatched(BaseModel):
-    next_action: Literal["KEEP", "MODIFY", "ADD"]
-    old_bullet_points: Optional[list[ResumeBullet]]
-    new_bullet_points: Optional[list[ResumeBullet]]
+class TailorDecisionMatched(BaseModel):
+    action: Literal["KEEP", "MODIFY", "ADD"]
+    old_bullet: Optional[ResumeBullet] 
+    new_bullet: Optional[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
     reasoning: str
     evidence: list[str]
+
+class TailorMatched(BaseModel):
+    decisions: list[TailorDecisionMatched]
     resume_reference: ResumeReference = Field(
         description=(
             "Copy the resume_reference from the input exactly. "
@@ -136,17 +177,20 @@ class TailorMatched(BaseModel):
     )
     topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
 
+class TailorDecisionUnmatched(BaseModel):
+    action: Literal["ADD"]
+    new_bullet: str = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
+    reasoning: str
+    evidence: list[str]
+
 class TailorUnmatched(BaseModel):
-    next_action: Literal["ADD"] 
-    new_bullet_points: list[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
+    decisions: list[TailorDecisionUnmatched]
     company_name: Optional[str] = Field("Company name if experience learned from work. Otherwise return None")
     duration: Optional[str] = Field("Duration of work experience if provided. Example: Dec 2024 - Present")
     job_location: Optional[str]
     job_title: Optional[str] = Field("Job title at company if experienced learned from work. Otherwise return None")
     skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
     project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
-    reasoning: str
-    evidence: list[str] = Field(description="Supporting summarized evidence")
     topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
 
 class TailorMatchList(BaseModel):
