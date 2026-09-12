@@ -32,24 +32,61 @@ class ResumeReference(BaseModel):
 
 class InterviewDetails(BaseModel):
     topic_id: str = Field(description="Unique identifier for topic")
+
     priority: Literal["Low", "Medium", "High"]
-    relevant_experience: list[str] = Field(description="Relevant experience from candidate profile data. Do not mesh experience together that are from different sections")
+
+    topic: str = Field(
+        description="Concise name for the specific investigation target."
+    )
+
+    job_requirement: str = Field(
+        description="The relevant job requirement exactly as stated or faithfully represented."
+    )
+
+    reason: str = Field(
+        description=(
+            "Why this requirement warrants investigation for this candidate. "
+            "Explain the evidence gap in candidate-specific terms rather than simply "
+            "stating that the requirement is missing from the resume."
+        )
+    )
+
+    objective: str = Field(
+        description=(
+            "What the investigation should establish. Define the specific evidence "
+            "needed to determine whether this candidate can credibly demonstrate the "
+            "job requirement."
+        )
+    )
+
+    relevant_experience: list[str] = Field(
+        description=(
+            "Candidate experiences relevant or potentially relevant to the investigation. "
+            "Keep experiences distinct and do not merge experiences from different sections."
+        )
+    )
+
     relevant_experience_from_resume: Optional[list[ResumeReference]] = Field(
         description=(
-            "References to the complete resume entries relevant to this topic. "
-            "The reference identifies the entry by type and entry_id. If none found, return None"
+            "References to complete resume entries relevant to this topic. "
+            "Each reference identifies an entry by type and entry_id. "
+            "Return None if no relevant resume entries exist."
         )
-    )    
-    topic: str
-    reason: str
-    objective: str
-    job_requirement: str = Field(description="The job requirements listed for this skill")
+    )
+
+    evidence_gap: str = Field(
+        description=(
+        "The specific important fact, evidence, or uncertainty that is currently "
+        "unknown, weak, or insufficiently demonstrated. This should describe what "
+        "the interview needs to uncover, not merely repeat the job requirement."
+        )
+    )
 
 class InterviewPlan(BaseModel):
     interview_plan: List[InterviewDetails]
 
 class Evidence(BaseModel):
-    project_name: Optional[str]
+    project_name: str = Field(description="If not provided from user, create one using context")
     experience_found: Optional[list[str]]
     technologies: Optional[list[str]]
     ownership: Optional[list[str]]
@@ -60,6 +97,10 @@ class Evidence(BaseModel):
     job_title: Optional[str]
     job_location: Optional[str]
     duration: Optional[str]
+    candidate_statements: Optional[list[str]] = Field(
+    default=None,
+    description="Original statements from the candidate that directly support the extracted evidence. Preserve the candidate's wording without adding interpretation or unsupported details."
+)
 
 class InvestigateOutput(BaseModel):
     need_more_info: bool = Field(description="If more context is needed to investigate candidate experience, return True, else False")
@@ -105,7 +146,7 @@ class TailorUnmatched(BaseModel):
     skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
     project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
     reasoning: str
-    evidence: list[str] = Field(description="Supporting evidence backed up by real data")
+    evidence: list[str] = Field(description="Supporting summarized evidence")
     topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
 
 class TailorMatchList(BaseModel):

@@ -4,11 +4,17 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage
 
+from datetime import date
+
+def get_current_date():
+    return date.today().isoformat()
+
 async def analyze_candidate(state: AgentState):
 
     resume_data = state.get("resume_data")
     job_details = state.get("job_details")
     job_requirements = job_details.job_requirements
+    current_date = get_current_date()
 
     fields = ["job_title", "job_responsibilities",  "job_company"]
 
@@ -22,7 +28,7 @@ async def analyze_candidate(state: AgentState):
     prompt = ChatPromptTemplate.from_messages(
         [("system", """
 You are a resume analysis agent. Perform a thorough, evidence-based comparison of the candidate against the job requirements.
-
+current date: {current_date}
 Rules:
 
 Use only information explicitly supported by the candidate data. Do not infer or assume qualifications.
@@ -48,7 +54,7 @@ The goal is to produce a deep assessment of the candidate's fit, including stren
 
     model = ChatOpenAI(model="gpt-4o")
     llm_structured = model.with_structured_output(CandidateAnalysis)
-    response = await llm_structured.ainvoke(prompt.format_messages(job_details=selected, resume_data=resume_data, candidate_profile_data=candidate_profile_data, job_requirements=job_requirements))
+    response = await llm_structured.ainvoke(prompt.format_messages(current_date=current_date,job_details=selected, resume_data=resume_data, candidate_profile_data=candidate_profile_data, job_requirements=job_requirements))
 
     return {
         "candidate_analysis": response,

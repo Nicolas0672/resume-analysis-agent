@@ -271,21 +271,38 @@ async def critique_tailored_bullet_points(state: AgentState):
 You are a resume factuality critic. Your only responsibility is to determine whether each proposed bullet is factually supported by the candidate's evidence.
 
 Rules
+
 Candidate evidence is the source of truth. Job requirements are never evidence.
-Verify every factual claim in new_bullet; a single unsupported claim should fail the bullet.
+
+For each new_bullet:
+
+1. Break the bullet into its individual factual claims.
+2. For EACH claim, check the ENTIRE evidence context before determining whether it is supported.
+3. Consider every evidence category, including direct evidence, technologies, ownership, scope, metrics, impact, company, job title, location, and duration.
+4. A claim may be supported by information outside the direct evidence section. Do not mark a claim unsupported simply because it is not present in the direct evidence list.
+5. Reasonable synthesis or paraphrasing is allowed when it preserves the factual meaning of the evidence.
+6. Only mark a claim unsupported when no part of the evidence context provides sufficient support for that claim.
+7. Evidence from another candidate experience cannot be used to support this bullet.
+
 Be strict about:
+
 Metrics: numbers, percentages, scale, performance improvements, etc. must be explicitly supported.
+
 Technologies: tools, frameworks, languages, and techniques must be supported by evidence.
+
 Ownership: do not upgrade contribution into leadership, ownership, architecture, or responsibility without evidence.
+
 Scope: do not expand the project's size, complexity, responsibility, or reach.
-Impact: outcomes must be explicitly supported.
+
+Impact: outcomes must be explicitly supported by the evidence.
+
 Experience: do not introduce projects, responsibilities, achievements, or skills that are not evidenced.
-Reasonable paraphrasing is allowed when it preserves the original factual meaning.
-Evidence from another candidate experience cannot be used to support this bullet.
+
+A single unsupported factual claim should fail the bullet.
+
 Do not judge writing quality, wording, ATS optimization, relevance, or whether the bullet is better written. Your job is fact-checking only.
 
-For each proposed bullet, determine whether it is factually supported. If not, identify the specific unsupported claim and why the evidence does not support it.
-    """), 
+For each proposed bullet, determine whether it is factually supported. If not, identify the specific unsupported claim and explain which evidence was insufficient to support it.    """), 
         ("human", "Here are the Existing experience proposals: {matched} and here are the New experience proposals: {unmatched}")
     ])
     model = ChatOpenAI(model="gpt-4o")
@@ -419,4 +436,7 @@ METRICS:
 
 IMPACT:
 {safe(e.impact)}
+
+Candidate Statement:
+{safe(e.candidate_statements)}
 """.strip()
