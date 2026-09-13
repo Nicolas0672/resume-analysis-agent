@@ -10,6 +10,7 @@ from backend.model.job_pydantic import JobDetails, ResumeStructure
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     resume_data: ResumeStructure
+    resume_to_edit: ResumeStructure
     job_details: JobDetails
     candidate_analysis: CandidateAnalysis
     candidate_profile_data: Optional[dict] 

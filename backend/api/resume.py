@@ -2,8 +2,8 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import HttpUrl
-from backend.agent.graph import initialize_tailoring_session, resume_tailoring_session, get_session_state
-from backend.services.resume_analysis_service import process_resume_analysis
+from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
+from backend.services.resume_service import apply_tailored_bullets, process_resume_analysis
 
 router = APIRouter(prefix="/tailor")
 
@@ -59,6 +59,17 @@ async def chat(session_id: str = Form(...), user_message: str = Form(...), reque
         "message": "Message processed successfully",
         "ai_response": response
     }
+
+# responsible for making the decision on agent tailored bullets. (KEEP/MODIFY/ADD)
+@router.post("/apply-tailoring")
+async def apply_tailoring(session_id: str = Form(...), topic_id: str = Form(...), request: Request = None):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    result = apply_tailored_bullets(session_id=session_id, topic_id=topic_id, request=request)
+
+    return result
+
 
 @router.get("/session/{session_id}")
 async def get_session(session_id: str, request: Request = None):

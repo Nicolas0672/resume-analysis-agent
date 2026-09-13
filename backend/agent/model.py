@@ -185,6 +185,7 @@ class TailorDecisionUnmatched(BaseModel):
 
 class TailorUnmatched(BaseModel):
     decisions: list[TailorDecisionUnmatched]
+    type: Literal["leadership", "work_experience", "projects"]
     company_name: Optional[str] = Field("Company name if experience learned from work. Otherwise return None")
     duration: Optional[str] = Field("Duration of work experience if provided. Example: Dec 2024 - Present")
     job_location: Optional[str]
@@ -192,7 +193,9 @@ class TailorUnmatched(BaseModel):
     skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
     project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
     topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
-
+    leadership_position: Optional[str] 
+    leadership_title: Optional[str]
+    
 class TailorMatchList(BaseModel):
     tailor_matched: List[TailorMatched]
 

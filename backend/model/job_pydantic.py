@@ -41,7 +41,7 @@ class ResumeExperience(BaseModel):
     job_title: Optional[str] = None
     location: Optional[str] = None
     duration: Optional[str] = None
-
+    technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeLeadership(BaseModel):
@@ -101,3 +101,4 @@ class ResumeStructure(BaseModel):
     projects: list[ResumeProject] = Field(default_factory=list)
     certifications: list[ResumeCertification] = Field(default_factory=list)
     skills: Optional[ResumeSkills] = None
+
