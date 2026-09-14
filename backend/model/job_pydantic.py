@@ -31,11 +31,11 @@ class JobDetails(BaseModel):
 
 class ResumeBullet(BaseModel):
     text: str
-    sentence_id: str
+    sentence_id: int
 
 
 class ResumeExperience(BaseModel):
-    entry_id: str
+    entry_id: int
 
     company: Optional[str] = None
     job_title: Optional[str] = None
@@ -45,14 +45,14 @@ class ResumeExperience(BaseModel):
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeLeadership(BaseModel):
-    entry_id: str
+    entry_id: int
     title: str
     position: Optional[str]
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 
 class ResumeEducation(BaseModel):
-    entry_id: str
+    entry_id: int
 
     institution: Optional[str] = None
     degree: Optional[str] = None
@@ -63,21 +63,21 @@ class ResumeEducation(BaseModel):
     gpa: Optional[str] = None
     coursework: Optional[list[str]]
 
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 
 class ResumeProject(BaseModel):
-    entry_id: str
+    entry_id: int
     project_name: Optional[str] = None
     technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 
 class ResumeCertification(BaseModel):
-    entry_id: str
+    entry_id: int
     name: str
     date: Optional[str] = None
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 
 class ResumeSkills(BaseModel):
@@ -89,7 +89,7 @@ class ResumeSkills(BaseModel):
     tools: Optional[list[str]] = Field(default_factory=list)
     other: Optional[list[str]] = Field(default_factory=list)
 
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 
 class ResumeStructure(BaseModel):

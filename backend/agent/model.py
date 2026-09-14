@@ -29,7 +29,7 @@ class CandidateAnalysis(BaseModel):
 
 class ResumeReference(BaseModel):
     type: Literal["projects", "work_experience", "leadership"]
-    entry_id: str = Field(
+    entry_id: int = Field(
     description="The entry_id of the resume entry being referenced."
         )
 
@@ -179,7 +179,7 @@ class TailorMatched(BaseModel):
 
 class TailorDecisionUnmatched(BaseModel):
     action: Literal["ADD"]
-    new_bullet: str = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
+    new_bullet: ResumeBullet = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
     reasoning: str
     evidence: list[str]
 

@@ -5,8 +5,7 @@ from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, RemoveMessage
 
-# investigation messages need to be cleared for a new topic id run
-# evidence with details should be passed in to continue convo for other topics if related
+# if user has 2 experience within a message window, it should be viewed as 2 seperate objects
 
 def reset_investigation(state: AgentState):
     return {

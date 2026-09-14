@@ -236,33 +236,35 @@ async def critique_tailored_bullet_points(state: AgentState):
     unmatched = []
 
     for tailor_matched in all_tailor_matched:
-        old_bullet_point = tailor_matched.old_bullet_points
-        new_bullet_point = tailor_matched.new_bullet_points
-        reasoning = tailor_matched.reasoning
-        evidence = evidence_by_topic_id[tailor_matched.topic_id]
+        for decision in tailor_matched.decisions:
+            old_bullet_point = decision.old_bullet
+            new_bullet_point = decision.new_bullet
+            reasoning = decision.reasoning
+            evidence = evidence_by_topic_id[tailor_matched.topic_id]
 
-        res = {
-            "old_bullet_point": old_bullet_point,
-            "new_bullet_point": new_bullet_point,
-            "reasoning": reasoning,
-            "evidence_context": format_evidence_for_critic(evidence=evidence),
-            "topic_id": evidence.topic_id
-        }
-        matched.append(res)
+            res = {
+                "old_bullet_point": old_bullet_point,
+                "new_bullet_point": new_bullet_point,
+                "reasoning": reasoning,
+                "evidence_context": format_evidence_for_critic(evidence=evidence),
+                "topic_id": evidence.topic_id
+            }
+            matched.append(res)
 
     for tailor_unmatched in all_tailor_unmatched:
-        new_bullet_point = tailor_unmatched.new_bullet_points
-        reasoning = tailor_unmatched.reasoning
-        evidence = evidence_by_topic_id[tailor_unmatched.topic_id]
+        for decision in tailor_unmatched.decisions:
+            new_bullet_point = decision.new_bullet
+            reasoning = decision.reasoning
+            evidence = evidence_by_topic_id[tailor_unmatched.topic_id]
 
-        res = {
-            "new_bullet_point": new_bullet_point,
-            "reasoning": reasoning,
-            "evidence_context": format_evidence_for_critic(evidence=evidence),
-            "topic_id": evidence.topic_id
-        }
+            res = {
+                "new_bullet_point": new_bullet_point,
+                "reasoning": reasoning,
+                "evidence_context": format_evidence_for_critic(evidence=evidence),
+                "topic_id": evidence.topic_id
+            }
 
-        unmatched.append(res)    
+            unmatched.append(res)    
 
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -330,37 +332,30 @@ async def regenerate_bullets(state: AgentState):
 
     feedback_with_evidence = []
 
-    for tailor_matched in state["tailor_analysis"].tailor_matched_list:
-        topic_id = tailor_matched.topic_id
+    for tailor in (
+        state["tailor_analysis"].tailor_matched_list
+        + state["tailor_analysis"].tailor_unmatched_list
+    ):
+        topic_id = tailor.topic_id
 
         if topic_id in feedback_by_topic_id:
             feedback = feedback_by_topic_id[topic_id]
             evidence = evidence_by_topic_id[topic_id]
-            old_bullets = tailor_matched.old_bullet_points
-            new_bullets = tailor_matched.new_bullet_points
 
-            feedback_with_evidence.append({
-                "evidence": evidence,
-                "feedback": feedback,
-                "old_bullets": old_bullets,
-                "new_bullets": new_bullets,
-                "topic_id": topic_id
-            })
+            for decision in tailor.decisions:
+                old_bullets = getattr(decision, "old_bullet", None)
+                new_bullets = getattr(tailor, "new_bullet", None)
 
-    for tailor_unmatched in state["tailor_analysis"].tailor_unmatched_list:
-        topic_id = tailor_unmatched.topic_id
+                if not old_bullets and not new_bullets:
+                    continue
 
-        if topic_id in feedback_by_topic_id:
-            feedback = feedback_by_topic_id[topic_id]
-            evidence = evidence_by_topic_id[topic_id]
-            new_bullets = tailor_unmatched.new_bullet_points
-
-            feedback_with_evidence.append({
-                "evidence": evidence,
-                "feedback": feedback,
-                "new_bullets": new_bullets,
-                "topic_id": topic_id
-            })
+                feedback_with_evidence.append({
+                    "evidence": evidence,
+                    "feedback": feedback,
+                    "old_bullets": old_bullets,
+                    "new_bullets": new_bullets,
+                    "topic_id": topic_id
+                })
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", 
@@ -392,7 +387,7 @@ For each proposal:
     for regenerated in res.regenerated_bullet_list:
         for proposal in all_tailored:
             if proposal.topic_id == regenerated.topic_id:
-                proposal.new_bullet_points = regenerated.new_bullet_points
+                proposal.new_bullet = regenerated.new_bullet
                 break
 
     return state
