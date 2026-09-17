@@ -77,7 +77,7 @@ async def delete_bullet(
     snapshot = await graph_with_memory.aget_state(config)
     resume_to_edit = snapshot.values["resume_to_edit"]
 
-    for section in resume_to_edit.model_fields:
+    for section in type(resume_to_edit).model_fields:
         value = getattr(resume_to_edit, section)
 
         if not isinstance(value, list):
@@ -155,7 +155,7 @@ async def apply_tailored_bullets(
                         break
 
             elif decision.action == "ADD":
-                next_sentence_id = get_next_sentence_id(entry.bullets)
+                next_sentence_id = get_next_sentence_id(resume=resume_to_edit)
 
                 decision.new_bullet.sentence_id = next_sentence_id
 
@@ -183,8 +183,13 @@ async def apply_tailored_bullets(
             for decision in tailored_unmatched.decisions
             if decision.new_bullet is not None
         ]
+        next_sentence_id = get_next_sentence_id(resume=resume_to_edit)
 
-        entry_id = get_next_entry_id(section)
+        for bullet in bullets:
+            bullet.sentence_id = next_sentence_id
+            next_sentence_id += 1
+
+        entry_id = get_next_entry_id(resume=resume_to_edit)
 
         if section_type == "leadership":
             section.append(
@@ -237,9 +242,45 @@ async def apply_tailored_bullets(
         "resume_to_edit": resume_to_edit,
     }
 
-# # responsible for taking in 
-# async def edit_resume_bullets(session_id: str, topic_id: str, request: Request, sentence_id: str, new_text: str):
 
+async def edit_resume_bullets(session_id: str, request: Request, sentence_id: str, new_text: str):
+    config = {
+        "configurable": {
+            "thread_id": session_id
+        }
+    }
+
+    graph_with_memory = request.app.state.graph_with_memory
+
+    snapshot = await graph_with_memory.aget_state(config)
+    state = snapshot.values
+
+    resume_to_edit = state["resume_to_edit"]
+
+    for section in type(resume_to_edit).model_fields:
+        value = getattr(resume_to_edit, section)
+
+        if not isinstance(value, list):
+            continue
+
+        for entry in value:
+            bullets = getattr(entry, "bullets", None)
+
+            if not bullets:
+                continue
+
+            for bullet in bullets:
+                if bullet.sentence_id == sentence_id:
+                    bullet.text = new_text
+
+                    await graph_with_memory.aupdate_state(
+                        config,
+                        {"resume_to_edit": resume_to_edit}
+                    )
+
+                    return {"status": "edited"}
+
+    return {"status": "not_found"}
 
 async def edit_tailored_bullets(session_id: str, topic_id: str, request: Request, sentence_id: str, new_text: str):
 
@@ -264,7 +305,7 @@ async def edit_tailored_bullets(session_id: str, topic_id: str, request: Request
     for tailored in all_tailored:
         if tailored.topic_id == topic_id:
             for decision in tailored.decisions:
-                if decision.new_bullet.sentence_id is not None and decision.new_bullet.sentence_id == sentence_id:
+                if decision.new_bullet is not None and decision.new_bullet.sentence_id == sentence_id:
                     decision.new_bullet.text = new_text
                     await graph_with_memory.aupdate_state(
                         config,

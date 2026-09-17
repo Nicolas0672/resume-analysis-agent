@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 
 class JobDetails(BaseModel):
@@ -35,8 +36,7 @@ class ResumeBullet(BaseModel):
 
 
 class ResumeExperience(BaseModel):
-    entry_id: int
-
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     company: Optional[str] = None
     job_title: Optional[str] = None
     location: Optional[str] = None
@@ -45,15 +45,14 @@ class ResumeExperience(BaseModel):
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeLeadership(BaseModel):
-    entry_id: int
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None    
     title: str
     position: Optional[str]
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 
 class ResumeEducation(BaseModel):
-    entry_id: int
-
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     institution: Optional[str] = None
     degree: Optional[str] = None
     field_of_study: Optional[str] = None
@@ -67,14 +66,14 @@ class ResumeEducation(BaseModel):
 
 
 class ResumeProject(BaseModel):
-    entry_id: int
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None    
     project_name: Optional[str] = None
     technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 
 class ResumeCertification(BaseModel):
-    entry_id: int
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None    
     name: str
     date: Optional[str] = None
     sentence_ids: list[int] = Field(default_factory=list)
@@ -95,7 +94,7 @@ class ResumeSkills(BaseModel):
 class ResumeStructure(BaseModel):
     name: Optional[str] = None
     contact: Optional[str] = None
-    leadership: Optional[list[ResumeLeadership]]
+    leadership: list[ResumeLeadership] = Field(default_factory=list)
     work_experience: list[ResumeExperience] = Field(default_factory=list)
     education: list[ResumeEducation] = Field(default_factory=list)
     projects: list[ResumeProject] = Field(default_factory=list)

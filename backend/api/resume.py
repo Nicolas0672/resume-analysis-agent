@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import HttpUrl
 from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
-from backend.services.resume_service import apply_tailored_bullets, delete_bullet, edit_tailored_bullets, process_resume_analysis
+from backend.services.resume_service import apply_tailored_bullets, delete_bullet, edit_resume_bullets, edit_tailored_bullets, process_resume_analysis
 
 router = APIRouter(prefix="/tailor")
 
@@ -64,9 +64,6 @@ async def chat(session_id: str = Form(...), user_message: str = Form(...), reque
         "ai_response": response
     }
 
-# responsible for making the decision on agent tailored bullets. (KEEP/MODIFY/ADD)
-
-
 @router.post("/apply-tailoring")
 async def apply_tailoring(session_id: str = Form(...), topic_id: str = Form(...), request: Request = None):
     if not session_id:
@@ -76,12 +73,6 @@ async def apply_tailoring(session_id: str = Form(...), topic_id: str = Form(...)
         session_id=session_id, topic_id=topic_id, request=request)
 
     return result
-
-# USER FLOW
-# User clicks on bullet points to edit. Need topic_id, sentence_id. new_text
-# when user hits accept on edit, our service needs to find the topic_id and sentence_id on the tailor analysis.
-# figure out what that tailor analysis type is and find that section on resume.
-# find sentence_id and replace old_text with new_text
 
 @router.post("/custom-tailoring")
 async def custom_tailoring(session_id: str = Form(...), topic_id: str = Form(...), request: Request = None,
@@ -112,3 +103,11 @@ async def delete_bullet(session_id: str = Form(...), request: Request = None, to
         raise HTTPException(status_code=400, detail="Session ID is required")
     state = await delete_bullet(sentence_id=sentence_id, session_id=session_id, request=request)
     return state
+
+@router.post("/edit-resume-bullets")
+async def edit_resume_bullet(session_id: str = Form(...), request: Request = None, new_text: str = Form(...), sentence_id: int = Form(...)):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+    state = await edit_resume_bullets(sentence_id=sentence_id, session_id=session_id, request=request, new_text=new_text)
+    return state
+
