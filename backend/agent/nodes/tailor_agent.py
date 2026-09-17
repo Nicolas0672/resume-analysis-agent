@@ -215,13 +215,41 @@ async def tailor_resume_bullet_points(state: AgentState):
         "tailor_analysis": tailor_analysis
     }
 
-# we will output a pydantic containing a list of [valid, suggestions, topic_id]
-# using a seperate node to regenerate, we will get invalid states and search tailor_matched/unmatched by topic_id
-# and feed in suggestions
-# we do not need an outside bool field to check if overall list is invalid.
-# python syntax allows us to check if all is valid through foreach
-# if any invalid, regenerate node would pick apart valid + invalid. pass invalid to llm only
 async def critique_tailored_bullet_points(state: AgentState):
+
+    model = ChatOpenAI(model="gpt-4o")
+    llm_structured = model.with_structured_output(Feedbacks)
+    feedbacks = []
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+    """ 
+You are a resume factuality critic.
+
+Determine whether each proposed bullet contains any factual claim that is not
+supported by the candidate evidence.
+
+The candidate evidence is the source of truth. Ignore the job requirement.
+
+For each bullet:
+- Verify every factual claim against the entire evidence.
+- Reasonable paraphrasing and synthesis are allowed.
+- Evidence can be distributed across the evidence context.
+- Do not require the evidence to use the exact wording of the bullet.
+- Be strict about fabricated metrics, technologies, ownership, scope, impact,
+  projects, responsibilities, or achievements.
+- If every factual claim is supported, mark the bullet valid.
+- If any factual claim is unsupported, mark it invalid and identify that claim.
+
+Do not judge writing quality, relevance, ATS optimization, or wording.
+
+The question is simply:
+"Could the candidate truthfully say this based on the evidence provided?
+"""), 
+        ("human", "Here are the input: {input}")
+    ])
+
     tailor_analysis = state["tailor_analysis"]
     
     evidence_by_topic_id = {
@@ -231,88 +259,35 @@ async def critique_tailored_bullet_points(state: AgentState):
 
     all_tailor_matched = tailor_analysis.tailor_matched_list
     all_tailor_unmatched = tailor_analysis.tailor_unmatched_list 
+    all_bullets_with_evidence = []
 
-    matched = []
-    unmatched = []
+    for tailor_result in all_tailor_matched + all_tailor_unmatched:
+        all_bullets = []
 
-    for tailor_matched in all_tailor_matched:
-        for decision in tailor_matched.decisions:
-            old_bullet_point = decision.old_bullet
-            new_bullet_point = decision.new_bullet
-            reasoning = decision.reasoning
-            evidence = evidence_by_topic_id[tailor_matched.topic_id]
-
-            res = {
-                "old_bullet_point": old_bullet_point,
-                "new_bullet_point": new_bullet_point,
-                "reasoning": reasoning,
-                "evidence_context": format_evidence_for_critic(evidence=evidence),
-                "topic_id": evidence.topic_id
-            }
-            matched.append(res)
-
-    for tailor_unmatched in all_tailor_unmatched:
-        for decision in tailor_unmatched.decisions:
-            new_bullet_point = decision.new_bullet
-            reasoning = decision.reasoning
-            evidence = evidence_by_topic_id[tailor_unmatched.topic_id]
-
-            res = {
-                "new_bullet_point": new_bullet_point,
-                "reasoning": reasoning,
-                "evidence_context": format_evidence_for_critic(evidence=evidence),
-                "topic_id": evidence.topic_id
+        for decision in tailor_result.decisions:
+            bullet = {
+                "new_bullet_point": decision.new_bullet,
             }
 
-            unmatched.append(res)    
+            if decision.old_bullet is not None:
+                bullet["old_bullet_point"] = decision.old_bullet
 
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-    """ 
-You are a resume factuality critic. Your only responsibility is to determine whether each proposed bullet is factually supported by the candidate's evidence.
+            all_bullets.append(bullet)
 
-Rules
+        evidence = evidence_by_topic_id[tailor_result.topic_id]
 
-Candidate evidence is the source of truth. Job requirements are never evidence.
+        all_bullets_with_evidence.append({
+            "all_bullets": all_bullets,
+            "evidence_context": format_evidence_for_critic(evidence),
+            "topic_id": evidence.topic_id,
+        })
 
-For each new_bullet:
-
-1. Break the bullet into its individual factual claims.
-2. For EACH claim, check the ENTIRE evidence context before determining whether it is supported.
-3. Consider every evidence category, including direct evidence, technologies, ownership, scope, metrics, impact, company, job title, location, and duration.
-4. A claim may be supported by information outside the direct evidence section. Do not mark a claim unsupported simply because it is not present in the direct evidence list.
-5. Reasonable synthesis or paraphrasing is allowed when it preserves the factual meaning of the evidence.
-6. Only mark a claim unsupported when no part of the evidence context provides sufficient support for that claim.
-7. Evidence from another candidate experience cannot be used to support this bullet.
-
-Be strict about:
-
-Metrics: numbers, percentages, scale, performance improvements, etc. must be explicitly supported.
-
-Technologies: tools, frameworks, languages, and techniques must be supported by evidence.
-
-Ownership: do not upgrade contribution into leadership, ownership, architecture, or responsibility without evidence.
-
-Scope: do not expand the project's size, complexity, responsibility, or reach.
-
-Impact: outcomes must be explicitly supported by the evidence.
-
-Experience: do not introduce projects, responsibilities, achievements, or skills that are not evidenced.
-
-A single unsupported factual claim should fail the bullet.
-
-Do not judge writing quality, wording, ATS optimization, relevance, or whether the bullet is better written. Your job is fact-checking only.
-
-For each proposed bullet, determine whether it is factually supported. If not, identify the specific unsupported claim and explain which evidence was insufficient to support it.    """), 
-        ("human", "Here are the Existing experience proposals: {matched} and here are the New experience proposals: {unmatched}")
-    ])
-    model = ChatOpenAI(model="gpt-4o")
-    llm_structured = model.with_structured_output(Feedbacks)
-    response = await llm_structured.ainvoke(prompt.format_messages(matched=matched, unmatched=unmatched))
+        response = await llm_structured.ainvoke(prompt.format_messages(input=all_bullets_with_evidence))
+        feedbacks.extend(response.feedbacks)
+        
 
     return {
-        "feedbacks": response
+        "feedbacks": feedbacks
     }
 
 async def regenerate_bullets(state: AgentState):
@@ -323,11 +298,9 @@ async def regenerate_bullets(state: AgentState):
 
     feedbacks = state["feedbacks"].feedbacks
 
-    invalid = [feedback for feedback in feedbacks if feedback.valid is False]
-
     feedback_by_topic_id = {
         feedback.topic_id: feedback
-        for feedback in invalid
+        for feedback in feedbacks
     }
 
     feedback_with_evidence = []
@@ -336,26 +309,32 @@ async def regenerate_bullets(state: AgentState):
         state["tailor_analysis"].tailor_matched_list
         + state["tailor_analysis"].tailor_unmatched_list
     ):
-        topic_id = tailor.topic_id
+        feedback = feedback_by_topic_id.get(tailor.topic_id)
 
-        if topic_id in feedback_by_topic_id:
-            feedback = feedback_by_topic_id[topic_id]
-            evidence = evidence_by_topic_id[topic_id]
+        if not feedback:
+            continue
 
-            for decision in tailor.decisions:
-                old_bullets = getattr(decision, "old_bullet", None)
-                new_bullets = getattr(tailor, "new_bullet", None)
+        evidence = evidence_by_topic_id[tailor.topic_id]
 
-                if not old_bullets and not new_bullets:
-                    continue
+        for decision in tailor.decisions:
+            bullet_feedback = next(
+                (
+                    bf
+                    for bf in feedback.bullet_feedbacks
+                    if bf.sentence_id == decision.new_bullet.sentence_id or bf.sentence_id == decision.old_bullet.sentence_id
+                ),
+                None,
+            )
 
-                feedback_with_evidence.append({
-                    "evidence": evidence,
-                    "feedback": feedback,
-                    "old_bullets": old_bullets,
-                    "new_bullets": new_bullets,
-                    "topic_id": topic_id
-                })
+            if not bullet_feedback or bullet_feedback.valid:
+                continue
+
+            feedback_with_evidence.append({
+                "old_bullet": decision.old_bullet,
+                "new_bullet": decision.new_bullet,
+                "feedback": bullet_feedback,
+                "evidence": evidence,
+            })
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", 

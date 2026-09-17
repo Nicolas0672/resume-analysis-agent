@@ -1,6 +1,7 @@
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from backend.model.job_pydantic import ResumeBullet
 
@@ -179,6 +180,7 @@ class TailorMatched(BaseModel):
 
 class TailorDecisionUnmatched(BaseModel):
     action: Literal["ADD"]
+    old_bullet: SkipJsonSchema[None] = None    
     new_bullet: ResumeBullet = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
     reasoning: str
     evidence: list[str]
@@ -206,7 +208,7 @@ class TailorAnalysis(BaseModel):
     tailor_matched_list: list[TailorMatched] = []
     tailor_unmatched_list: list[TailorUnmatched] = []
 
-class Feedback(BaseModel):
+class BulletFeedback(BaseModel):
     valid: bool = Field(
         description="Whether the proposed bullet is factually supported by the candidate's evidence."
     )
@@ -214,6 +216,11 @@ class Feedback(BaseModel):
     suggestions: str = Field(
         description="If invalid, identify the specific claim that is unsupported or missing evidence, state that the claim must be removed or corrected, and explain which evidence limitation makes it inaccurate. If valid, state that no factual correction is required."
     )
+
+    sentence_id: int
+
+class Feedback(BaseModel):
+    bullet_feedbacks: list[BulletFeedback]
 
     topic_id: str = Field(
         description="The topic ID associated with the evidence used to evaluate this bullet."

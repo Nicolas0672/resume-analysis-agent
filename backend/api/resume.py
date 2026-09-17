@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import HttpUrl
 from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
-from backend.services.resume_service import apply_custom_bullets, apply_tailored_bullets, delete_bullets, process_resume_analysis
+from backend.services.resume_service import apply_tailored_bullets, delete_bullet, edit_tailored_bullets, process_resume_analysis
 
 router = APIRouter(prefix="/tailor")
 
@@ -90,7 +90,7 @@ async def custom_tailoring(session_id: str = Form(...), topic_id: str = Form(...
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    result = await apply_custom_bullets(session_id=session_id, topic_id=topic_id, request=request, sentence_id=sentence_id, new_text=new_text)
+    result = await edit_tailored_bullets(session_id=session_id, topic_id=topic_id, request=request, sentence_id=sentence_id, new_text=new_text)
 
     return result
 
@@ -110,5 +110,5 @@ async def get_session(session_id: str, request: Request = None):
 async def delete_bullet(session_id: str = Form(...), request: Request = None, topic_id: str = Form(...), sentence_id: int = Form(...)):
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
-    state = await delete_bullets(sentence_id=sentence_id, session_id=session_id, request=request, topic_id=topic_id)
+    state = await delete_bullet(sentence_id=sentence_id, session_id=session_id, request=request)
     return state
