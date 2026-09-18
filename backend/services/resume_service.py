@@ -64,7 +64,7 @@ async def process_resume_analysis(
 async def delete_bullet(
     session_id: str,
     request: Request,
-    sentence_id: str,
+    sentence_id: int,
 ):
     config = {
         "configurable": {
@@ -101,6 +101,44 @@ async def delete_bullet(
                     return {"status": "deleted"}
 
     return {"status": "not_found"}
+
+# currently this deletes the right entry but more.
+async def delete_entry(
+    session_id: str,
+    request: Request,
+    entry_id: int,
+):
+    config = {
+        "configurable": {
+            "thread_id": session_id
+        }
+    }
+
+    graph_with_memory = request.app.state.graph_with_memory
+
+    snapshot = await graph_with_memory.aget_state(config)
+    resume_to_edit = snapshot.values["resume_to_edit"]
+
+    for section in type(resume_to_edit).model_fields:
+        value = getattr(resume_to_edit, section)
+
+        if not isinstance(value, list):
+            continue
+
+        for entry in value:
+            if entry.entry_id is not None and entry.entry_id == entry_id:
+                print("found")
+                print(entry_id)
+                print(entry)
+                value.remove(entry)
+                await graph_with_memory.aupdate_state(
+                    config,
+                    {"resume_to_edit": resume_to_edit}
+                )
+                return {"status": "deleted"}
+
+    return {"status": "not_found"}
+
 
 async def apply_tailored_bullets(
     session_id: str,
@@ -243,7 +281,7 @@ async def apply_tailored_bullets(
     }
 
 
-async def edit_resume_bullets(session_id: str, request: Request, sentence_id: str, new_text: str):
+async def edit_resume_bullets(session_id: str, request: Request, sentence_id: int, new_text: str):
     config = {
         "configurable": {
             "thread_id": session_id
@@ -282,7 +320,7 @@ async def edit_resume_bullets(session_id: str, request: Request, sentence_id: st
 
     return {"status": "not_found"}
 
-async def edit_tailored_bullets(session_id: str, topic_id: str, request: Request, sentence_id: str, new_text: str):
+async def edit_tailored_bullets(session_id: str, topic_id: str, request: Request, sentence_id: int, new_text: str):
 
     config = {
         "configurable": {

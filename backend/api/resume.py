@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import HttpUrl
 from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
-from backend.services.resume_service import apply_tailored_bullets, delete_bullet, edit_resume_bullets, edit_tailored_bullets, process_resume_analysis
+from backend.services.resume_service import apply_tailored_bullets, delete_bullet, delete_entry, edit_resume_bullets, edit_tailored_bullets, process_resume_analysis
 
 router = APIRouter(prefix="/tailor")
 
@@ -98,7 +98,7 @@ async def get_session(session_id: str, request: Request = None):
     }
 
 @router.post("/delete-bullet")
-async def delete_bullet(session_id: str = Form(...), request: Request = None, topic_id: str = Form(...), sentence_id: int = Form(...)):
+async def delete_bullets(session_id: str = Form(...), request: Request = None, sentence_id: int = Form(...)):
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
     state = await delete_bullet(sentence_id=sentence_id, session_id=session_id, request=request)
@@ -109,5 +109,12 @@ async def edit_resume_bullet(session_id: str = Form(...), request: Request = Non
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
     state = await edit_resume_bullets(sentence_id=sentence_id, session_id=session_id, request=request, new_text=new_text)
+    return state
+
+@router.post("/delete-entry")
+async def delete_entries(session_id: str = Form(...), request: Request = None, entry_id: int = Form(...)):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+    state = await delete_entry(entry_id=entry_id, session_id=session_id, request=request)
     return state
 
