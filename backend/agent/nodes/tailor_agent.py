@@ -134,6 +134,7 @@ async def tailor_resume_bullet_points(state: AgentState):
     - When modifying or adding new bullet point, always prioritize using the XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
     - For every matched candidate, return the resume_reference exactly as provided
     in the input. It is an identifier, not a value to generate.
+    - In the 'evidence' list for each decision, include only concise, concrete factual items (e.g., specific technologies, metrics, performance gains, tools, or scope). Do NOT include raw candidate_statements or candidate quotes; candidate_statements is strictly for internal agent reasoning.
 
     Do not modify, infer, normalize, or create a new resume_reference.
     Copy the input resume_reference exactly.
@@ -175,6 +176,7 @@ async def tailor_resume_bullet_points(state: AgentState):
     keywords that are not supported by the evidence.
     - Keep the bullets concise, specific, and achievement-oriented.
     - Prioritize using the XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact.
+    - In the 'evidence' list for each decision, include only concise, concrete factual items (e.g., technologies, metrics, team scale). Do NOT include raw candidate_statements or quotes.
     """
         ),
         (

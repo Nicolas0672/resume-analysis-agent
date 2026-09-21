@@ -27,6 +27,8 @@ class AgentState(TypedDict):
     need_more_info: bool
     completed_topic_ids: Annotated[list[str], add]
 
+    applied_tailored_topic_ids: Annotated[list[str], add]
+
     proceed_to_tailor_resume: bool
 
     investigation_messages: Annotated[Sequence[BaseMessage], add_messages]

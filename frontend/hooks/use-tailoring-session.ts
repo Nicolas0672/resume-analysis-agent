@@ -14,6 +14,11 @@ import {
   TailorAnalysis,
 } from "@/lib/types";
 import {
+  applyTailoring,
+  customTailoring,
+  deleteBullet,
+  deleteEntry,
+  editResumeBullet,
   getSessionState,
   sendChatMessage,
   uploadResume,
@@ -45,6 +50,7 @@ function extractStateValues(stateObj: unknown): Record<string, unknown> | null {
       curr.job_details ||
       curr.candidate_analysis ||
       curr.resume_data ||
+      curr.resume_to_edit ||
       curr.interview_plan ||
       curr.tailor_analysis
     ) {
@@ -97,9 +103,10 @@ export function useTailoringSession() {
   const [fallbackErrorMessage, setFallbackErrorMessage] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
-  // Domain data
+  // Domain data (Original baseline vs mutable working draft)
   const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
   const [resumeData, setResumeData] = useState<ResumeStructure | null>(null);
+  const [resumeToEdit, setResumeToEdit] = useState<ResumeStructure | null>(null);
   const [candidateAnalysis, setCandidateAnalysis] = useState<CandidateAnalysis | null>(null);
 
   // Interview state
@@ -113,6 +120,7 @@ export function useTailoringSession() {
   // Tailoring & verification
   const [tailorAnalysis, setTailorAnalysis] = useState<TailorAnalysis | null>(null);
   const [feedbacks, setFeedbacks] = useState<Feedbacks | null>(null);
+  const [appliedTopicIds, setAppliedTopicIds] = useState<string[]>([]);
   const [proposalDecisions, setProposalDecisions] = useState<Record<string, ProposalDecision>>({});
 
   const initializedRef = useRef(false);
@@ -162,9 +170,17 @@ export function useTailoringSession() {
         if (values) {
           if (values.job_details) setJobDetails(values.job_details as JobDetails);
           if (values.resume_data) setResumeData(values.resume_data as ResumeStructure);
+          if (values.resume_to_edit) {
+            setResumeToEdit(values.resume_to_edit as ResumeStructure);
+          } else if (values.resume_data) {
+            setResumeToEdit(values.resume_data as ResumeStructure);
+          }
           if (values.candidate_analysis) setCandidateAnalysis(values.candidate_analysis as CandidateAnalysis);
           if (values.interview_plan) setInterviewPlan(values.interview_plan as InterviewPlan);
           if (values.completed_topic_ids) setCompletedTopicIds(values.completed_topic_ids as string[]);
+          if (values.applied_tailored_topic_ids && Array.isArray(values.applied_tailored_topic_ids)) {
+            setAppliedTopicIds(values.applied_tailored_topic_ids as string[]);
+          }
           if (values.evidence_with_details) setEvidenceWithDetails(values.evidence_with_details as EvidenceWithDetails[]);
           if (values.tailor_analysis) setTailorAnalysis(values.tailor_analysis as TailorAnalysis);
           if (values.feedbacks) setFeedbacks(values.feedbacks as Feedbacks);
@@ -298,12 +314,16 @@ export function useTailoringSession() {
           setSessionId(res.session_id);
           updateSessionPersistence(res.session_id);
 
-          // Check direct upload payload first
           if (res.job_details) {
             setJobDetails(res.job_details);
           }
           if (res.resume_data) {
             setResumeData(res.resume_data);
+          }
+          if (res.resume_to_edit) {
+            setResumeToEdit(res.resume_to_edit);
+          } else if (res.resume_data) {
+            setResumeToEdit(res.resume_data);
           }
 
           const aiResp = res.ai_response;
@@ -315,6 +335,9 @@ export function useTailoringSession() {
           }
           if (aiResp.resume_data) {
             setResumeData(aiResp.resume_data);
+          }
+          if (aiResp.resume_to_edit) {
+            setResumeToEdit(aiResp.resume_to_edit);
           }
 
           // Unpack raw interrupt from initialize_tailoring_session
@@ -330,6 +353,11 @@ export function useTailoringSession() {
             if (vals) {
               if (vals.job_details) setJobDetails(vals.job_details as JobDetails);
               if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
+              if (vals.resume_to_edit) {
+                setResumeToEdit(vals.resume_to_edit as ResumeStructure);
+              } else if (vals.resume_data) {
+                setResumeToEdit(vals.resume_data as ResumeStructure);
+              }
               if (vals.candidate_analysis) setCandidateAnalysis(vals.candidate_analysis as CandidateAnalysis);
             }
           } catch (fetchErr) {
@@ -381,6 +409,11 @@ export function useTailoringSession() {
             if (vals.evidence_with_details) setEvidenceWithDetails(vals.evidence_with_details as EvidenceWithDetails[]);
             if (vals.job_details) setJobDetails(vals.job_details as JobDetails);
             if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
+            if (vals.resume_to_edit) {
+              setResumeToEdit(vals.resume_to_edit as ResumeStructure);
+            } else if (vals.resume_data) {
+              setResumeToEdit(vals.resume_data as ResumeStructure);
+            }
           }
           setPhase("interview");
         } else if (action === "tailor") {
@@ -391,6 +424,11 @@ export function useTailoringSession() {
             if (vals.tailor_analysis) setTailorAnalysis(vals.tailor_analysis as TailorAnalysis);
             if (vals.feedbacks) setFeedbacks(vals.feedbacks as Feedbacks);
             if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
+            if (vals.resume_to_edit) {
+              setResumeToEdit(vals.resume_to_edit as ResumeStructure);
+            } else if (vals.resume_data) {
+              setResumeToEdit(vals.resume_data as ResumeStructure);
+            }
           }
           setPhase("tailor");
         }
@@ -507,6 +545,11 @@ export function useTailoringSession() {
         if (result.tailor_analysis) setTailorAnalysis(result.tailor_analysis);
         if (result.feedbacks) setFeedbacks(result.feedbacks);
         if (result.resume_data) setResumeData(result.resume_data);
+        if (result.resume_to_edit) {
+          setResumeToEdit(result.resume_to_edit);
+        } else if (result.resume_data) {
+          setResumeToEdit(result.resume_data);
+        }
       } else {
         // Query session state directly
         const stateRes = await getSessionState(sessionId);
@@ -515,6 +558,11 @@ export function useTailoringSession() {
           if (vals.tailor_analysis) setTailorAnalysis(vals.tailor_analysis as TailorAnalysis);
           if (vals.feedbacks) setFeedbacks(vals.feedbacks as Feedbacks);
           if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
+          if (vals.resume_to_edit) {
+            setResumeToEdit(vals.resume_to_edit as ResumeStructure);
+          } else if (vals.resume_data) {
+            setResumeToEdit(vals.resume_data as ResumeStructure);
+          }
         }
       }
 
@@ -527,7 +575,112 @@ export function useTailoringSession() {
     }
   }, [sessionId, setPhase]);
 
-  // Phase 3: Decide on a proposal (Accept / Reject / Custom Edit)
+  // Phase 3: Apply an entire tailoring topic to resume_to_edit
+  const handleApplyTailoring = useCallback(
+    async (topicId: string) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await applyTailoring(sessionId, topicId);
+        if ((res.status === "updated" || res.status === "already_applied") && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+        if (res.applied_tailored_topic_ids && Array.isArray(res.applied_tailored_topic_ids)) {
+          setAppliedTopicIds(res.applied_tailored_topic_ids);
+        } else {
+          setAppliedTopicIds((prev) => Array.from(new Set([...prev, topicId])));
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to apply tailoring for topic");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Tweak a proposed bullet before applying
+  const handleCustomTailoring = useCallback(
+    async (topicId: string, sentenceId: number, newText: string) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await customTailoring(sessionId, topicId, sentenceId, newText);
+        if (res.status === "updated" && res.tailor_analysis) {
+          setTailorAnalysis(res.tailor_analysis);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to update custom proposal");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Direct in-place editing of working resume bullets
+  const handleEditResumeBullet = useCallback(
+    async (sentenceId: number, newText: string) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await editResumeBullet(sessionId, sentenceId, newText);
+        if (res.status === "edited" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to edit bullet");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Delete bullet by sentence_id from resume_to_edit
+  const handleDeleteBullet = useCallback(
+    async (sentenceId: number) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await deleteBullet(sessionId, sentenceId);
+        if (res.status === "deleted" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to delete bullet");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Delete whole entry by entry_id from resume_to_edit
+  const handleDeleteEntry = useCallback(
+    async (entryId: number) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await deleteEntry(sessionId, entryId);
+        if (res.status === "deleted" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to delete entry");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Legacy proposal decisions tracker (maintained for compatibility)
   const handleDecideProposal = useCallback(
     (proposalKey: string, status: "accepted" | "rejected", customText?: string) => {
       setProposalDecisions((prev) => ({
@@ -555,6 +708,7 @@ export function useTailoringSession() {
     setPhase("setup");
     setJobDetails(null);
     setResumeData(null);
+    setResumeToEdit(null);
     setCandidateAnalysis(null);
     setInterviewPlan(null);
     setCompletedTopicIds([]);
@@ -564,6 +718,7 @@ export function useTailoringSession() {
     setInvestigationMessages([]);
     setTailorAnalysis(null);
     setFeedbacks(null);
+    setAppliedTopicIds([]);
     setProposalDecisions({});
     setError(null);
     setRequiresJobDescriptionFallback(false);
@@ -583,6 +738,7 @@ export function useTailoringSession() {
     pendingFile,
     jobDetails,
     resumeData,
+    resumeToEdit,
     candidateAnalysis,
     interviewPlan,
     completedTopicIds,
@@ -592,12 +748,18 @@ export function useTailoringSession() {
     investigationMessages,
     tailorAnalysis,
     feedbacks,
+    appliedTopicIds,
     proposalDecisions,
     handleUpload,
     handleSelectAction,
     handleSelectTopic,
     handleSubmitAnswer,
     handleProceedToTailoring,
+    handleApplyTailoring,
+    handleCustomTailoring,
+    handleEditResumeBullet,
+    handleDeleteBullet,
+    handleDeleteEntry,
     handleDecideProposal,
     handleFinishProposalReview,
     handleBackToTailoring,

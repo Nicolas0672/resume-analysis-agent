@@ -98,7 +98,10 @@ async def delete_bullet(
                         {"resume_to_edit": resume_to_edit}
                     )
 
-                    return {"status": "deleted"}
+                    return {
+                        "status": "deleted",
+                        "resume_to_edit": resume_to_edit
+                        }
 
     return {"status": "not_found"}
 
@@ -135,7 +138,10 @@ async def delete_entry(
                     config,
                     {"resume_to_edit": resume_to_edit}
                 )
-                return {"status": "deleted"}
+                return {
+                    "status": "deleted",
+                    "resume_to_edit": resume_to_edit
+                    }
 
     return {"status": "not_found"}
 
@@ -158,6 +164,14 @@ async def apply_tailored_bullets(
 
     resume_to_edit = state["resume_to_edit"]
     tailor_analysis = state["tailor_analysis"]
+    applied_ids = state.get("applied_tailored_topic_ids") or []
+
+    if topic_id in applied_ids:
+        return {
+            "status": "already_applied",
+            "resume_to_edit": resume_to_edit,
+            "applied_tailored_topic_ids": applied_ids,
+        }
 
     found = False
 
@@ -272,12 +286,13 @@ async def apply_tailored_bullets(
     # Both paths mutate the same resume, so save once.
     await graph_with_memory.aupdate_state(
         config,
-        {"resume_to_edit": resume_to_edit},
+        {"resume_to_edit": resume_to_edit, "applied_tailored_topic_ids": [topic_id]},
     )
 
     return {
         "status": "updated",
         "resume_to_edit": resume_to_edit,
+        "applied_tailored_topic_ids": list(dict.fromkeys(applied_ids + [topic_id])),
     }
 
 
@@ -316,7 +331,10 @@ async def edit_resume_bullets(session_id: str, request: Request, sentence_id: in
                         {"resume_to_edit": resume_to_edit}
                     )
 
-                    return {"status": "edited"}
+                    return {
+                        "status": "edited",
+                        "resume_to_edit": resume_to_edit,
+                        }
 
     return {"status": "not_found"}
 
@@ -349,7 +367,10 @@ async def edit_tailored_bullets(session_id: str, topic_id: str, request: Request
                         config,
                         {"tailor_analysis": tailored_analysis}
                     )
-                    return {"status": "updated"}
+                    return {
+                        "status": "updated",
+                        "tailor_analysis": tailored_analysis
+                        }
     return {
         "status": "not_found"
     }

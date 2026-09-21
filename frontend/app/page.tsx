@@ -21,6 +21,7 @@ export default function Home() {
     pendingFile,
     jobDetails,
     resumeData,
+    resumeToEdit,
     candidateAnalysis,
     interviewPlan,
     completedTopicIds,
@@ -30,20 +31,24 @@ export default function Home() {
     investigationMessages,
     tailorAnalysis,
     feedbacks,
-    proposalDecisions,
+    appliedTopicIds,
     handleUpload,
     handleSelectAction,
     handleSelectTopic,
     handleSubmitAnswer,
     handleProceedToTailoring,
-    handleDecideProposal,
+    handleApplyTailoring,
+    handleCustomTailoring,
+    handleEditResumeBullet,
+    handleDeleteBullet,
+    handleDeleteEntry,
     handleFinishProposalReview,
     handleBackToTailoring,
     handleResetSession,
   } = useTailoringSession();
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50/50 dark:bg-zinc-950">
+    <div className="min-h-screen flex flex-col bg-zinc-50/50 dark:bg-zinc-950 print:min-h-0 print:bg-white print:p-0 print:m-0">
       {/* Top Header */}
       <Header
         phase={phase}
@@ -54,7 +59,7 @@ export default function Home() {
 
       {/* Global Error Banner */}
       {error && (
-        <div className="w-full max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8 print:hidden">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 shadow-xs">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
@@ -62,7 +67,7 @@ export default function Home() {
             </div>
             <button
               onClick={() => handleResetSession()}
-              className="font-semibold underline text-red-700 hover:text-red-900 dark:text-red-400"
+              className="font-semibold underline text-red-700 hover:text-red-900 dark:text-red-400 cursor-pointer"
             >
               Reset Session
             </button>
@@ -71,7 +76,7 @@ export default function Home() {
       )}
 
       {/* Adaptive Phase Workspace */}
-      <main className="flex-1 flex flex-col justify-center">
+      <main className="flex-1 flex flex-col justify-center print:block print:w-full print:m-0 print:p-0">
         {phase === "setup" && (
           <Dropzone
             isLoading={isLoading}
@@ -111,11 +116,17 @@ export default function Home() {
         {phase === "tailor" && (
           <TailoringWorkspace
             resumeData={resumeData}
+            resumeToEdit={resumeToEdit}
             tailorAnalysis={tailorAnalysis}
             feedbacks={feedbacks}
-            proposalDecisions={proposalDecisions}
+            appliedTopicIds={appliedTopicIds}
+            interviewPlan={interviewPlan}
             isSynthesizing={isSynthesizing}
-            onDecideProposal={handleDecideProposal}
+            onApplyTopic={handleApplyTailoring}
+            onCustomTailoring={handleCustomTailoring}
+            onEditResumeBullet={handleEditResumeBullet}
+            onDeleteBullet={handleDeleteBullet}
+            onDeleteEntry={handleDeleteEntry}
             onFinishReview={handleFinishProposalReview}
           />
         )}
@@ -123,8 +134,8 @@ export default function Home() {
         {phase === "compare" && (
           <FinalComparison
             originalResume={resumeData}
-            tailorAnalysis={tailorAnalysis}
-            proposalDecisions={proposalDecisions}
+            tailoredResume={resumeToEdit}
+            appliedTopicCount={appliedTopicIds.length}
             onBackToTailoring={handleBackToTailoring}
           />
         )}

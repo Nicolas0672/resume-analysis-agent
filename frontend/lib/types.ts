@@ -9,27 +9,28 @@ export interface JobDetails {
 
 export interface ResumeBullet {
   text: string;
-  sentence_id: string;
+  sentence_id: number;
 }
 
 export interface ResumeExperience {
-  entry_id: string;
+  entry_id?: number | null;
   company?: string | null;
   job_title?: string | null;
   location?: string | null;
   duration?: string | null;
+  technologies?: string[] | null;
   bullets: ResumeBullet[];
 }
 
 export interface ResumeLeadership {
-  entry_id: string;
+  entry_id?: number | null;
   title: string;
   position?: string | null;
   bullets: ResumeBullet[];
 }
 
 export interface ResumeEducation {
-  entry_id: string;
+  entry_id?: number | null;
   institution?: string | null;
   degree?: string | null;
   field_of_study?: string | null;
@@ -37,21 +38,21 @@ export interface ResumeEducation {
   duration?: string | null;
   gpa?: string | null;
   coursework?: string[] | null;
-  sentence_ids?: string[];
+  sentence_ids: number[];
 }
 
 export interface ResumeProject {
-  entry_id: string;
+  entry_id?: number | null;
   project_name?: string | null;
   technologies?: string[] | null;
   bullets: ResumeBullet[];
 }
 
 export interface ResumeCertification {
-  entry_id: string;
+  entry_id?: number | null;
   name: string;
   date?: string | null;
-  sentence_ids?: string[];
+  sentence_ids: number[];
 }
 
 export interface ResumeSkills {
@@ -62,13 +63,13 @@ export interface ResumeSkills {
   cloud?: string[];
   tools?: string[];
   other?: string[];
-  sentence_ids?: string[];
+  sentence_ids: number[];
 }
 
 export interface ResumeStructure {
   name?: string | null;
   contact?: string | null;
-  leadership?: ResumeLeadership[] | null;
+  leadership: ResumeLeadership[];
   work_experience: ResumeExperience[];
   education: ResumeEducation[];
   projects: ResumeProject[];
@@ -101,7 +102,7 @@ export interface CandidateAnalysis {
 
 export interface ResumeReference {
   type: "projects" | "work_experience" | "leadership";
-  entry_id: string;
+  entry_id: number;
 }
 
 export interface InterviewDetails {
@@ -113,6 +114,7 @@ export interface InterviewDetails {
   reason: string;
   objective: string;
   job_requirement: string;
+  evidence_gap?: string;
 }
 
 export interface InterviewPlan {
@@ -120,17 +122,19 @@ export interface InterviewPlan {
 }
 
 export interface Evidence {
-  project_name?: string | null;
+  project_name: string;
   experience_found?: string[] | null;
   technologies?: string[] | null;
   ownership?: string[] | null;
   scope?: string[] | null;
   metrics?: string[] | null;
   impact?: string[] | null;
+  motivation?: string[] | null;
   company?: string | null;
   job_title?: string | null;
   job_location?: string | null;
   duration?: string | null;
+  candidate_statements?: string[] | null;
 }
 
 export interface EvidenceWithDetails {
@@ -150,28 +154,39 @@ export interface EvidenceMappingResult {
   evidence_mappings: EvidenceMapping[];
 }
 
-export interface TailorMatched {
-  next_action: "KEEP" | "MODIFY" | "ADD";
-  old_bullet_points?: ResumeBullet[] | null;
-  new_bullet_points?: ResumeBullet[] | null;
+export interface TailorDecisionMatched {
+  action: "KEEP" | "MODIFY" | "ADD";
+  old_bullet?: ResumeBullet | null;
+  new_bullet?: ResumeBullet | null;
   reasoning: string;
   evidence: string[];
+}
+
+export interface TailorMatched {
+  decisions: TailorDecisionMatched[];
   resume_reference: ResumeReference;
   topic_id: string;
 }
 
+export interface TailorDecisionUnmatched {
+  action: "ADD";
+  new_bullet: ResumeBullet;
+  reasoning: string;
+  evidence: string[];
+}
+
 export interface TailorUnmatched {
-  next_action: "ADD";
-  new_bullet_points: ResumeBullet[];
+  decisions: TailorDecisionUnmatched[];
+  type: "leadership" | "work_experience" | "projects";
   company_name?: string | null;
   duration?: string | null;
   job_location?: string | null;
   job_title?: string | null;
   skills?: string[] | null;
   project_name?: string | null;
-  reasoning: string;
-  evidence: string[];
   topic_id: string;
+  leadership_position?: string | null;
+  leadership_title?: string | null;
 }
 
 export interface TailorAnalysis {
@@ -179,9 +194,14 @@ export interface TailorAnalysis {
   tailor_unmatched_list: TailorUnmatched[];
 }
 
-export interface Feedback {
+export interface BulletFeedback {
   valid: boolean;
   suggestions: string;
+  sentence_id: number;
+}
+
+export interface Feedback {
+  bullet_feedbacks: BulletFeedback[];
   topic_id: string;
 }
 
@@ -217,10 +237,12 @@ export interface UploadSuccessResponse {
   requires_job_description: false;
   job_details?: JobDetails;
   resume_data?: ResumeStructure;
+  resume_to_edit?: ResumeStructure;
   ai_response: {
     __interrupt__?: RawInterrupt[];
     candidate_analysis?: CandidateAnalysis;
     resume_data?: ResumeStructure;
+    resume_to_edit?: ResumeStructure;
     job_details?: JobDetails;
   };
 }
@@ -243,10 +265,12 @@ export interface ChatInterruptResponse {
 
 export interface CompletedStateResult {
   resume_data?: ResumeStructure;
+  resume_to_edit?: ResumeStructure;
   job_details?: JobDetails;
   candidate_analysis?: CandidateAnalysis;
   interview_plan?: InterviewPlan;
   completed_topic_ids?: string[];
+  applied_tailored_topic_ids?: string[];
   evidence_with_details?: EvidenceWithDetails[];
   evidence_mapping?: EvidenceMappingResult;
   tailor_analysis?: TailorAnalysis;
@@ -271,9 +295,36 @@ export interface SessionStateResponse {
     interrupt?: InterruptPayload;
     result?: CompletedStateResult;
     values?: CompletedStateResult;
+    state?: CompletedStateResult;
     next?: string[];
     [key: string]: unknown;
   };
+}
+
+export interface ApplyTailoringResponse {
+  status: "updated" | "already_applied" | "not_found";
+  resume_to_edit?: ResumeStructure;
+  applied_tailored_topic_ids?: string[];
+}
+
+export interface CustomTailoringResponse {
+  status: "updated" | "not_found";
+  tailor_analysis?: TailorAnalysis;
+}
+
+export interface EditBulletResponse {
+  status: "edited" | "not_found";
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface DeleteBulletResponse {
+  status: "deleted" | "not_found";
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface DeleteEntryResponse {
+  status: "deleted" | "not_found";
+  resume_to_edit?: ResumeStructure;
 }
 
 export type AppPhase = "setup" | "verification" | "interview" | "tailor" | "compare";

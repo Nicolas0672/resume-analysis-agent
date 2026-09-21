@@ -16,7 +16,8 @@ async def initialize_tailoring_session(session_id: str, parsed_resume: dict, job
         "resume_data": parsed_resume,
         "resume_to_edit": parsed_resume,
         "job_details": job_details,
-        "candidate_profile_data": candidate_profile_data
+        "candidate_profile_data": candidate_profile_data,
+        "applied_tailored_topic_ids": [],
     }, config=config)
 
     return response

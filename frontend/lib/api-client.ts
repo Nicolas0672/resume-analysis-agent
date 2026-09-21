@@ -1,4 +1,13 @@
-import { ChatResponse, SessionStateResponse, UploadResponse } from "./types";
+import {
+  ApplyTailoringResponse,
+  ChatResponse,
+  CustomTailoringResponse,
+  DeleteBulletResponse,
+  DeleteEntryResponse,
+  EditBulletResponse,
+  SessionStateResponse,
+  UploadResponse,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/tailor";
 
@@ -78,6 +87,147 @@ export async function getSessionState(sessionId: string): Promise<SessionStateRe
 
   if (!response.ok) {
     let errorDetail = "Failed to retrieve session state";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function applyTailoring(
+  sessionId: string,
+  topicId: string
+): Promise<ApplyTailoringResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("topic_id", topicId);
+
+  const response = await fetch(`${API_BASE}/apply-tailoring`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to apply tailoring for topic";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function customTailoring(
+  sessionId: string,
+  topicId: string,
+  sentenceId: number,
+  newText: string
+): Promise<CustomTailoringResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("topic_id", topicId);
+  formData.append("sentence_id", sentenceId.toString());
+  formData.append("new_text", newText);
+
+  const response = await fetch(`${API_BASE}/custom-tailoring`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to update custom tailored bullet";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function editResumeBullet(
+  sessionId: string,
+  sentenceId: number,
+  newText: string
+): Promise<EditBulletResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("sentence_id", sentenceId.toString());
+  formData.append("new_text", newText);
+
+  const response = await fetch(`${API_BASE}/edit-resume-bullets`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to edit resume bullet";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function deleteBullet(
+  sessionId: string,
+  sentenceId: number
+): Promise<DeleteBulletResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("sentence_id", sentenceId.toString());
+
+  const response = await fetch(`${API_BASE}/delete-bullet`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to delete bullet";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function deleteEntry(
+  sessionId: string,
+  entryId: number
+): Promise<DeleteEntryResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("entry_id", entryId.toString());
+
+  const response = await fetch(`${API_BASE}/delete-entry`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to delete resume entry";
     try {
       const errJson = await response.json();
       errorDetail = errJson.detail || errorDetail;

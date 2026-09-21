@@ -13,7 +13,8 @@ Based on [PRD.md](file:///D:/Documents/resume-agent/PRD.md), the system implemen
 6. Maps verified evidence back to specific resume experiences and projects ([`evidence_mapper`](file:///D:/Documents/resume-agent/backend/agent/nodes/tailor_agent.py#L7-L70)).
 7. Proposes justified resume bullet point improvements (KEEP, MODIFY, ADD) formatted with XYZ achievement syntax ([`tailor_resume_bullet_points`](file:///D:/Documents/resume-agent/backend/agent/nodes/tailor_agent.py#L73-L216)).
 8. Validates proposed bullets through an automated factuality critic ([`critique_tailored_bullet_points`](file:///D:/Documents/resume-agent/backend/agent/nodes/tailor_agent.py#L224-L301)) and iterative correction loop ([`regenerate_bullets`](file:///D:/Documents/resume-agent/backend/agent/nodes/tailor_agent.py#L303-L386)) to eliminate hallucinations.
-9. *(Planned Future Step)* Optimizes human-approved, verified bullets for Applicant Tracking Systems (ATS) keyword alignment and formatting.
+9. Provides interactive state modification endpoints enabling the candidate to preview, customize proposed bullets, apply tailoring updates per topic into an editable resume working copy ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)), and directly edit or delete bullets and entries.
+10. *(Planned Future Step)* Optimizes human-approved, verified bullets for Applicant Tracking Systems (ATS) keyword alignment and formatting.
 
 ### Scope Demarcation (Implementation Status)
 
@@ -30,6 +31,7 @@ Based on [PRD.md](file:///D:/Documents/resume-agent/PRD.md), the system implemen
 | **Resume Bullet Point Tailoring** | Implemented (`tailor_resume_bullet_points` in `tailor_agent.py`) | Tailoring Pipeline |
 | **Tailored Bullet Factuality Critique** | Implemented (`critique_tailored_bullet_points` in `tailor_agent.py`) | Tailoring Pipeline |
 | **Self-Correction & Regeneration Loop** | Implemented (`regenerate_bullets` node in `tailor_agent.py`) | Tailoring Pipeline |
+| **Interactive State Mutation & Tailoring Apply** | Implemented (Endpoints for applying, customizing proposals, and editing/deleting bullets & entries in `resume_service.py`) | Tailoring Pipeline |
 | **ATS Optimization Agent** | Planned Final Step (Runs after human approval to optimize for ATS) | Planned Roadmap |
 | **Direct Application Submission** | Explicitly Excluded | Non-goal |
 | **External DB & Vector Storage (RAG)**| Stubs only (`repository/`, `bucket/` empty) | Future Phase |
@@ -46,19 +48,32 @@ graph TD
     User([Candidate / Frontend Client]) -->|POST /tailor/upload| API_Upload[FastAPI: /tailor/upload]
     User -->|POST /tailor/chat| API_Chat[FastAPI: /tailor/chat]
     User -->|GET /tailor/session/{session_id}| API_Session[FastAPI: /tailor/session/{id}]
+    User -->|POST /tailor/apply-tailoring| API_Apply[FastAPI: /tailor/apply-tailoring]
+    User -->|POST /tailor/custom-tailoring| API_Custom[FastAPI: /tailor/custom-tailoring]
+    User -->|POST /tailor/edit-resume-bullets| API_EditBullet[FastAPI: /tailor/edit-resume-bullets]
+    User -->|POST /tailor/delete-bullet| API_DelBullet[FastAPI: /tailor/delete-bullet]
+    User -->|POST /tailor/delete-entry| API_DelEntry[FastAPI: /tailor/delete-entry]
 
     subgraph Service_Layer [Service Layer]
         API_Upload --> DocParser[Document Parser\n(services/document_parser.py)]
         API_Upload --> JobFetcher[Job Fetcher\n(services/job_fetcher.py)]
         DocParser --> PreLLM[Resume & Job Structurer\n(services/resume_pre_llm.py)]
         JobFetcher --> PreLLM
-        API_Upload --> AnalysisService[Resume Analysis Service\n(services/resume_analysis_service.py)]
+        API_Upload --> ResumeService[Resume Service\n(services/resume_service.py)]
+
+        API_Apply --> ResumeService
+        API_Custom --> ResumeService
+        API_EditBullet --> ResumeService
+        API_DelBullet --> ResumeService
+        API_DelEntry --> ResumeService
+        ResumeService --> Helper[ID Generators\n(services/helper.py)]
     end
 
     subgraph LangGraph_Runtime [LangGraph Orchestration Runtime]
         API_Upload -->|initialize_tailoring_session| GraphEngine[StateGraph Engine]
         API_Chat -->|resume_tailoring_session| GraphEngine
         API_Session -->|get_session_state| GraphEngine
+        ResumeService -->|aupdate_state\n(resume_to_edit / tailor_analysis)| GraphEngine
         GraphEngine <--> Checkpointer[(AsyncSqliteSaver\nbackend/data/app.db)]
         
         subgraph Graph_Nodes [Agent State Graph]
@@ -99,14 +114,14 @@ graph TD
 
 ## 3. End-to-End Data Flow
 
-The system operates across three primary interaction phases: Ingestion & Fit Analysis, Conversational Investigation with Context Reset, and Provenance Mapping, Tailoring & Factuality Verification.
+The system operates across four primary interaction phases: Ingestion & Fit Analysis, Conversational Investigation with Context Reset, Provenance Mapping & Tailoring Verification, and Interactive State Modification & Tailoring Application.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Client / Frontend UI
     participant API as FastAPI Router (/tailor)
-    participant Svc as Analysis Services
+    participant Svc as Resume & Analysis Services
     participant Graph as LangGraph Engine
     participant DB as SQLite Checkpointer (app.db)
     participant LLM as OpenAI (GPT-4o)
@@ -120,15 +135,15 @@ sequenceDiagram
     else Valid Content
         Svc->>Svc: parse_resume(file_bytes) -> sentences
         Svc->>LLM: validate_job_details(job_text) -> JobDetails
-        Svc->>LLM: structure_resume_data(sentences) -> ResumeStructure
+        Svc->>LLM: structure_resume_data(sentences) -> ResumeStructure (with entry_ids assigned)
         Svc-->>API: {success: true, structured_resume, job_details}
-        API->>Graph: initialize_tailoring_session(session_id, structured_resume, job_details)
+        API->>Graph: initialize_tailoring_session(session_id, resume_data, resume_to_edit, job_details)
         Graph->>LLM: analyze_candidate(resume, job_details)
         LLM-->>Graph: CandidateAnalysis (fit score, strengths, gaps)
         Graph->>Graph: human_after_analysis (triggers interrupt)
         Graph->>DB: Save thread checkpoint (thread_id=session_id)
         Graph-->>API: Raw interrupt snapshot (__interrupt__)
-        API-->>User: 200 OK: session_id + candidate review options ("done", "need_more_info", "tailor")
+        API-->>User: 200 OK: session_id, job_details, resume_data, candidate review options ("done", "need_more_info", "tailor")
     end
 
     Note over User, LLM: Phase 2: Conversational Investigation Loop
@@ -180,19 +195,48 @@ sequenceDiagram
     
     loop Factuality Verification Loop
         Graph->>LLM: critique_tailored_bullet_points(proposals, evidence_with_details)
-        LLM-->>Graph: Feedbacks (list of {valid, suggestions, topic_id})
-        alt Any feedback.valid == False
+        LLM-->>Graph: Feedbacks (list of {bullet_feedbacks, topic_id})
+        alt Any feedback item has invalid bullet
             Graph->>Graph: router_to_generate -> regenerate_bullets
             Graph->>LLM: regenerate_bullets (corrects unsupported claims using critic suggestions)
             LLM-->>Graph: RegeneratedBulletsList (updates proposals in-place)
             Graph->>Graph: returns to critique_tailored_bullet_points
-        else All feedback.valid == True
+        else All feedbacks valid
             Graph->>Graph: router_to_generate -> END
         end
     end
     Graph->>DB: Save final state checkpoint
     Graph-->>API: Normalized response (stage="completed", result={...tailor_analysis, feedbacks})
     API-->>User: 200 OK: Verified tailored bullet points & new experience proposals
+
+    Note over User, DB: Phase 4: Tailoring Customization & Interactive State Synchronization
+    opt Custom Tailoring Editing (Pre-Application)
+        User->>API: POST /tailor/custom-tailoring (session_id, topic_id, sentence_id, new_text)
+        API->>Svc: edit_tailored_bullets(session_id, topic_id, sentence_id, new_text)
+        Svc->>DB: aupdate_state({"tailor_analysis": tailored_analysis})
+        Svc-->>API: {status: "updated"}
+        API-->>User: 200 OK: Proposal text adjusted
+    end
+    opt Apply Tailored Topic to Resume
+        User->>API: POST /tailor/apply-tailoring (session_id, topic_id)
+        API->>Svc: apply_tailored_bullets(session_id, topic_id)
+        Svc->>DB: Read state (resume_to_edit, tailor_analysis)
+        Svc->>Svc: Apply MATCHED bullets (MODIFY / ADD) or UNMATCHED new entries with new IDs
+        Svc->>DB: aupdate_state({"resume_to_edit": resume_to_edit})
+        Svc-->>API: {status: "updated", resume_to_edit}
+        API-->>User: 200 OK: Working resume updated
+    end
+    opt Manual Resume Editing & Pruning
+        User->>API: POST /tailor/edit-resume-bullets (session_id, sentence_id, new_text)
+        API->>Svc: edit_resume_bullets -> aupdate_state({"resume_to_edit": resume_to_edit})
+        API-->>User: 200 OK: {status: "edited"}
+        User->>API: POST /tailor/delete-bullet (session_id, sentence_id)
+        API->>Svc: delete_bullet -> aupdate_state({"resume_to_edit": resume_to_edit})
+        API-->>User: 200 OK: {status: "deleted"}
+        User->>API: POST /tailor/delete-entry (session_id, entry_id)
+        API->>Svc: delete_entry -> aupdate_state({"resume_to_edit": resume_to_edit})
+        API-->>User: 200 OK: {status: "deleted"}
+    end
 ```
 
 ---
@@ -208,7 +252,8 @@ Defined in [`backend/agent/state.py`](file:///D:/Documents/resume-agent/backend/
 | Field | Type | Reducer | Description |
 | :--- | :--- | :--- | :--- |
 | `messages` | `Sequence[BaseMessage]` | `add_messages` | Global conversation/agent messages. |
-| `resume_data` | `ResumeStructure` | None (overwrite) | Structured, typed resume data (work experience, projects, leadership, education, skills). |
+| `resume_data` | `ResumeStructure` | None (overwrite) | Baseline structured, typed resume data extracted from the uploaded DOCX file. Kept immutable during session execution to preserve ground truth. |
+| `resume_to_edit` | `ResumeStructure` | None (overwrite) | Working editable copy of structured resume. Initialized with `resume_data` and mutated directly by tailoring application and manual edit/delete endpoints via `aupdate_state`. |
 | `job_details` | `JobDetails` | None (overwrite) | Structured, validated job details. |
 | `candidate_analysis` | `CandidateAnalysis` | None (overwrite) | Baseline gap, strength, and match score assessment. |
 | `candidate_profile_data`| `Optional[dict]` | None (overwrite) | Extended profile background (currently `None` in API). |
@@ -226,7 +271,7 @@ Defined in [`backend/agent/state.py`](file:///D:/Documents/resume-agent/backend/
 | `evidence_with_details` | `Annotated[list[EvidenceWithDetails], add]` | `operator.add` | Accumulated evidence records extracted across all interview topics. |
 | `evidence_mapping` | `EvidenceMappingResult` | None (overwrite) | Provenance mapping of evidence to resume entries. |
 | `tailor_analysis` | `TailorAnalysis` | None (overwrite) | Proposals: `tailor_matched_list` (modifications) + `tailor_unmatched_list` (new entries). |
-| `feedbacks` | `Feedbacks` | None (overwrite) | Factuality critic results (`List[Feedback]` with `valid`, `suggestions`, `topic_id`). |
+| `feedbacks` | `Feedbacks` | None (overwrite) | Factuality critic results (`Feedbacks` containing `List[Feedback]` with `bullet_feedbacks` and `topic_id`). |
 
 ---
 
@@ -356,6 +401,22 @@ Initiates a new session, parses and structures the uploaded DOCX resume into `Re
   "success": true,
   "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
   "requires_job_description": false,
+  "job_details": {
+    "is_valid": true,
+    "job_title": "Senior Python Backend Engineer",
+    "job_company": "TechCorp",
+    "job_location": "Remote",
+    "job_requirements": ["Python", "FastAPI", "Distributed Systems"],
+    "job_responsibilities": ["Design scalable APIs"]
+  },
+  "resume_data": {
+    "name": "Jane Doe",
+    "contact": "jane@example.com",
+    "work_experience": [...],
+    "projects": [...],
+    "education": [...],
+    "skills": { ... }
+  },
   "ai_response": {
     "__interrupt__": [
       {
@@ -496,7 +557,7 @@ When execution completes (after tailoring and factuality verification finishes):
 
 ### 5.3 GET `/tailor/session/{session_id}`
 
-Retrieves the current state snapshot for an active or completed LangGraph session thread, normalized through [`normalize_graph_response`](file:///D:/Documents/resume-agent/backend/agent/graph.py#L184-L203).
+Retrieves the current state snapshot for an active or completed LangGraph session thread, directly inspecting `graph_with_memory.aget_state(config)`.
 
 - **URL**: `/tailor/session/{session_id}`
 - **Method**: `GET`
@@ -511,24 +572,229 @@ Retrieves the current state snapshot for an active or completed LangGraph sessio
 {
   "message": "Session state retrieved successfully",
   "state": {
-    "stage": "completed",
-    "result": {
-      "values": {
-        "resume_data": { ... },
-        "job_details": { ... },
-        "candidate_analysis": { ... },
-        "interview_plan": { ... },
-        "completed_topic_ids": [ ... ],
-        "evidence_with_details": [ ... ],
-        "evidence_mapping": { ... },
-        "tailor_analysis": { ... },
-        "feedbacks": { ... }
-      },
-      "next": []
-    }
+    "stage": "active",
+    "state": {
+      "resume_data": { ... },
+      "resume_to_edit": { ... },
+      "job_details": { ... },
+      "candidate_analysis": { ... },
+      "interview_plan": { ... },
+      "completed_topic_ids": [ ... ],
+      "applied_tailored_topic_ids": [ ... ],
+      "evidence_with_details": [ ... ],
+      "evidence_mapping": { ... },
+      "tailor_analysis": { ... },
+      "feedbacks": { ... }
+    },
+    "next": []
   }
 }
 ```
+
+---
+
+### 5.4 POST `/tailor/apply-tailoring`
+
+Applies fact-checked tailored proposals from `tailor_analysis` for a given investigation topic directly to the working resume state ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`apply_tailored_bullets`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L143-L282). Enforces strict idempotency and updates the checkpointer via `aupdate_state`.
+
+- **URL**: `/tailor/apply-tailoring`
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded` or `multipart/form-data`
+
+#### Request Parameters
+| Parameter | Location | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `session_id` | Form Field | String (UUID) | Yes | Active session UUID. |
+| `topic_id` | Form Field | String | Yes | Topic identifier corresponding to proposals in `tailor_analysis`. |
+
+#### Application Behavior & Idempotency Guard
+1. **Idempotency Guard**:
+   - Inspects `state.get("applied_tailored_topic_ids", [])`.
+   - If `topic_id` is already in `applied_tailored_topic_ids`, returns immediately with `status: "already_applied"` without duplicating any bullets or entries.
+2. **Matched Tailoring (`tailor_matched_list`)**:
+   - Matches `topic_id` and locates target entry via `resume_reference.entry_id` within section `resume_reference.type`.
+   - `MODIFY`: Matches `bullet.sentence_id == decision.new_bullet.sentence_id` and overwrites `bullet.text`.
+   - `ADD`: Obtains `next_sentence_id` via [`get_next_sentence_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L4-L30) and appends a new `ResumeBullet`.
+3. **Unmatched Tailoring (`tailor_unmatched_list`)**:
+   - Matches `topic_id` and extracts new proposal bullets.
+   - Generates sequential `sentence_id`s and a new `entry_id` via [`get_next_entry_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L32-L44).
+   - Instantiates and appends a new typed entry ([`ResumeLeadership`](file:///D:/Documents/resume-agent/backend/model/job_pydantic.py#L47-L52), [`ResumeExperience`](file:///D:/Documents/resume-agent/backend/model/job_pydantic.py#L38-L46), or [`ResumeProject`](file:///D:/Documents/resume-agent/backend/model/job_pydantic.py#L68-L73)) into the corresponding section of `resume_to_edit`.
+4. **State Checkpoint Persistence**:
+   - Calls `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit, "applied_tailored_topic_ids": [topic_id]})`.
+
+#### Response (`200 OK`) — Success
+```json
+{
+  "status": "updated",
+  "resume_to_edit": {
+    "name": "Jane Doe",
+    "contact": "...",
+    "work_experience": [...],
+    "projects": [...],
+    "leadership": [...],
+    "education": [...],
+    "skills": { ... }
+  },
+  "applied_tailored_topic_ids": ["topic_kafka"]
+}
+```
+
+#### Response (`200 OK`) — Already Applied (Idempotent Guard)
+```json
+{
+  "status": "already_applied",
+  "resume_to_edit": { ... },
+  "applied_tailored_topic_ids": ["topic_kafka"]
+}
+```
+
+#### Response (`200 OK`) — Topic Not Found
+```json
+{
+  "status": "not_found"
+}
+```
+
+#### Error Responses
+- `400 Bad Request`: `{"detail": "Session ID is required"}`
+
+---
+
+### 5.5 POST `/tailor/custom-tailoring`
+
+Allows the candidate to tweak or edit proposed bullet text in `tailor_analysis` prior to applying it to the resume via [`edit_tailored_bullets`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L323-L356).
+
+- **URL**: `/tailor/custom-tailoring`
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded` or `multipart/form-data`
+
+#### Request Parameters
+| Parameter | Location | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `session_id` | Form Field | String (UUID) | Yes | Active session UUID. |
+| `topic_id` | Form Field | String | Yes | Investigation topic ID containing the target proposal. |
+| `sentence_id` | Form Field | Integer | Yes | Unique ID of the tailored proposal bullet to modify. |
+| `new_text` | Form Field | String | Yes | Updated candidate-revised bullet text. |
+
+#### Application Behavior
+- Scans `tailor_matched_list` and `tailor_unmatched_list` in `tailor_analysis` for `topic_id`.
+- Finds the decision where `decision.new_bullet.sentence_id == sentence_id`.
+- Updates `decision.new_bullet.text = new_text`.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"tailor_analysis": tailored_analysis})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "updated",
+  "tailor_analysis": { ... }
+}
+```
+*(Returns `{"status": "not_found"}` if proposal bullet cannot be located).*
+
+#### Error Responses
+- `400 Bad Request`: `{"detail": "Session ID is required"}`
+
+---
+
+### 5.6 POST `/tailor/edit-resume-bullets`
+
+Directly updates the text of an existing bullet in the active working resume ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`edit_resume_bullets`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L284-L322).
+
+- **URL**: `/tailor/edit-resume-bullets`
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded` or `multipart/form-data`
+
+#### Request Parameters
+| Parameter | Location | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `session_id` | Form Field | String (UUID) | Yes | Active session UUID. |
+| `sentence_id` | Form Field | Integer | Yes | Unique `sentence_id` of the bullet to edit. |
+| `new_text` | Form Field | String | Yes | Revised text for the bullet. |
+
+#### Application Behavior
+- Iterates over all list sections in `resume_to_edit` (`work_experience`, `leadership`, `projects`, etc.).
+- Locates the bullet matching `bullet.sentence_id == sentence_id`.
+- Replaces `bullet.text = new_text`.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "edited",
+  "resume_to_edit": { ... }
+}
+```
+*(Returns `{"status": "not_found"}` if `sentence_id` does not match any existing bullet).*
+
+#### Error Responses
+- `400 Bad Request`: `{"detail": "Session ID is required"}`
+
+---
+
+### 5.7 POST `/tailor/delete-bullet`
+
+Removes a specific bullet point by its `sentence_id` from the active working resume ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`delete_bullet`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L64-L103).
+
+- **URL**: `/tailor/delete-bullet`
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded` or `multipart/form-data`
+
+#### Request Parameters
+| Parameter | Location | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `session_id` | Form Field | String (UUID) | Yes | Active session UUID. |
+| `sentence_id` | Form Field | Integer | Yes | Unique `sentence_id` of the bullet point to delete. |
+
+#### Application Behavior
+- Traverses all list sections in `resume_to_edit`.
+- Searches entry `bullets` lists for `bullet.sentence_id == sentence_id`.
+- Removes the matching bullet from `entry.bullets`.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "deleted",
+  "resume_to_edit": { ... }
+}
+```
+*(Returns `{"status": "not_found"}` if `sentence_id` cannot be found).*
+
+#### Error Responses
+- `400 Bad Request`: `{"detail": "Session ID is required"}`
+
+---
+
+### 5.8 POST `/tailor/delete-entry`
+
+Deletes an entire experience, project, leadership, or education entry from the active working resume ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L106-L141).
+
+- **URL**: `/tailor/delete-entry`
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded` or `multipart/form-data`
+
+#### Request Parameters
+| Parameter | Location | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `session_id` | Form Field | String (UUID) | Yes | Active session UUID. |
+| `entry_id` | Form Field | Integer | Yes | Unique `entry_id` of the section entry to delete. |
+
+#### Application Behavior
+- Traverses list-based sections in `resume_to_edit` (`work_experience`, `projects`, `leadership`, `education`, `certifications`).
+- Locates the entry where `entry.entry_id == entry_id` and removes it from the section list.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "deleted",
+  "resume_to_edit": { ... }
+}
+```
+*(Returns `{"status": "not_found"}` if `entry_id` cannot be found).*
+
+#### Error Responses
+- `400 Bad Request`: `{"detail": "Session ID is required"}`
 
 ---
 
@@ -547,24 +813,25 @@ class JobDetails(BaseModel):
 
 class ResumeBullet(BaseModel):
     text: str
-    sentence_id: str
+    sentence_id: int
 
 class ResumeExperience(BaseModel):
-    entry_id: str
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     company: Optional[str] = None
     job_title: Optional[str] = None
     location: Optional[str] = None
     duration: Optional[str] = None
+    technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeLeadership(BaseModel):
-    entry_id: str
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     title: str
     position: Optional[str]
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeEducation(BaseModel):
-    entry_id: str
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     institution: Optional[str] = None
     degree: Optional[str] = None
     field_of_study: Optional[str] = None
@@ -572,19 +839,19 @@ class ResumeEducation(BaseModel):
     duration: Optional[str] = None
     gpa: Optional[str] = None
     coursework: Optional[list[str]]
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 class ResumeProject(BaseModel):
-    entry_id: str
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     project_name: Optional[str] = None
     technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
 
 class ResumeCertification(BaseModel):
-    entry_id: str
+    entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
     name: str
     date: Optional[str] = None
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 class ResumeSkills(BaseModel):
     programming_languages: Optional[list[str]] = Field(default_factory=list)
@@ -594,12 +861,12 @@ class ResumeSkills(BaseModel):
     cloud: Optional[list[str]] = Field(default_factory=list)
     tools: Optional[list[str]] = Field(default_factory=list)
     other: Optional[list[str]] = Field(default_factory=list)
-    sentence_ids: list[str] = Field(default_factory=list)
+    sentence_ids: list[int] = Field(default_factory=list)
 
 class ResumeStructure(BaseModel):
     name: Optional[str] = None
     contact: Optional[str] = None
-    leadership: Optional[list[ResumeLeadership]]
+    leadership: list[ResumeLeadership] = Field(default_factory=list)
     work_experience: list[ResumeExperience] = Field(default_factory=list)
     education: list[ResumeEducation] = Field(default_factory=list)
     projects: list[ResumeProject] = Field(default_factory=list)
@@ -610,16 +877,27 @@ class ResumeStructure(BaseModel):
 ### 6.2 Agent Domain Models ([`backend/agent/model.py`](file:///D:/Documents/resume-agent/backend/agent/model.py))
 
 ```python
+class CandidateStrength(BaseModel):
+    requirement: str
+    evidence: list[str]
+    explanation: str
+
+class CandidateGap(BaseModel):
+    requirement: str
+    status: Literal["missing", "partial", "unclear", "transferable"]
+    evidence: Optional[list[str]]
+    gap: str
+
 class CandidateAnalysis(BaseModel):
     score: Literal["weak match", "good match", "strong match"]
     relevant_experience: Optional[str]
-    strengths: Optional[list[str]]
-    gaps: Optional[list[str]]
+    strengths: Optional[list[CandidateStrength]]
+    gaps: Optional[list[CandidateGap]]
     user_message: str
 
 class ResumeReference(BaseModel):
     type: Literal["projects", "work_experience", "leadership"]
-    entry_id: str
+    entry_id: int
 
 class InterviewDetails(BaseModel):
     topic_id: str
@@ -630,22 +908,25 @@ class InterviewDetails(BaseModel):
     reason: str
     objective: str
     job_requirement: str
+    evidence_gap: str
 
 class InterviewPlan(BaseModel):
     interview_plan: List[InterviewDetails]
 
 class Evidence(BaseModel):
-    project_name: Optional[str]
-    experience_found: Optional[list[str]]
-    technologies: Optional[list[str]]
-    ownership: Optional[list[str]]
-    scope: Optional[list[str]]
-    metrics: Optional[list[str]]
-    impact: Optional[list[str]]
-    company: Optional[str]
-    job_title: Optional[str]
-    job_location: Optional[str]
-    duration: Optional[str]
+    project_name: str
+    experience_found: Optional[list[str]] = None
+    technologies: Optional[list[str]] = None
+    ownership: Optional[list[str]] = None
+    scope: Optional[list[str]] = None
+    metrics: Optional[list[str]] = None
+    impact: Optional[list[str]] = None
+    motivation: Optional[list[str]] = None
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+    job_location: Optional[str] = None
+    duration: Optional[str] = None
+    candidate_statements: Optional[list[str]] = None
 
 class InvestigateOutput(BaseModel):
     need_more_info: bool
@@ -666,27 +947,36 @@ class EvidenceMapping(BaseModel):
 class EvidenceMappingResult(BaseModel):
     evidence_mappings: List[EvidenceMapping]
 
-class TailorMatched(BaseModel):
-    next_action: Literal["KEEP", "MODIFY", "ADD"]
-    old_bullet_points: Optional[list[ResumeBullet]]
-    new_bullet_points: Optional[list[ResumeBullet]]
+class TailorDecisionMatched(BaseModel):
+    action: Literal["KEEP", "MODIFY", "ADD"]
+    old_bullet: Optional[ResumeBullet]
+    new_bullet: Optional[ResumeBullet]
     reasoning: str
     evidence: list[str]
+
+class TailorMatched(BaseModel):
+    decisions: list[TailorDecisionMatched]
     resume_reference: ResumeReference
     topic_id: str
 
+class TailorDecisionUnmatched(BaseModel):
+    action: Literal["ADD"]
+    new_bullet: ResumeBullet
+    reasoning: str
+    evidence: list[str]
+
 class TailorUnmatched(BaseModel):
-    next_action: Literal["ADD"]
-    new_bullet_points: list[ResumeBullet]
+    decisions: list[TailorDecisionUnmatched]
+    type: Literal["leadership", "work_experience", "projects"]
     company_name: Optional[str]
     duration: Optional[str]
     job_location: Optional[str]
     job_title: Optional[str]
     skills: Optional[list[str]]
     project_name: Optional[str]
-    reasoning: str
-    evidence: list[str]
     topic_id: str
+    leadership_position: Optional[str]
+    leadership_title: Optional[str]
 
 class TailorMatchList(BaseModel):
     tailor_matched: List[TailorMatched]
@@ -698,9 +988,13 @@ class TailorAnalysis(BaseModel):
     tailor_matched_list: list[TailorMatched] = []
     tailor_unmatched_list: list[TailorUnmatched] = []
 
-class Feedback(BaseModel):
+class BulletFeedback(BaseModel):
     valid: bool
     suggestions: str
+    sentence_id: int
+
+class Feedback(BaseModel):
+    bullet_feedbacks: list[BulletFeedback]
     topic_id: str
 
 class Feedbacks(BaseModel):
@@ -724,6 +1018,9 @@ class RegeneratedBulletsList(BaseModel):
 2. **Clean Topic Isolation with Cumulative Memory**: [`reset_investigation`](file:///D:/Documents/resume-agent/backend/agent/nodes/interview.py#L11-L17) removes prior thread messages when switching interview topics, preventing conversational noise from polluting subsequent probes, while [`evidence_with_details`](file:///D:/Documents/resume-agent/backend/agent/state.py#L32) acts as a persistent cross-topic knowledge bank.
 3. **Graceful Fallback & Input Flexibility**: The API router supports both live job scraping and direct text pasting. If anti-bot defenses trigger or scraped text is insufficient, the system gracefully prompts the user to paste text rather than raising an unhandled 500 error.
 4. **Normalized Client Contract**: [`normalize_graph_response`](file:///D:/Documents/resume-agent/backend/agent/graph.py#L184-L203) simplifies client handling by encapsulating LangGraph interrupts into a clean `{ interrupt: { type, message, options } }` structure.
+5. **Out-of-Graph State Synchronization (`aupdate_state`)**: State changes made by the user in the tailoring phase (editing bullets, customizing proposals, applying topics, or deleting entries) are committed directly to the session checkpointer via `graph_with_memory.aupdate_state()`. This avoids triggering unnecessary LLM invocations or restarting the graph state machine.
+6. **Dual Resume Architecture (`resume_data` vs `resume_to_edit`)**: The system cleanly separates the initial parsed resume ([`resume_data`](file:///D:/Documents/resume-agent/backend/agent/state.py#L12)), which remains immutable as ground truth, from the working draft ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)), which accumulates applied tailoring changes and human edits.
+7. **Deterministic Sequential ID Generation**: Centralized helper functions ([`get_next_sentence_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L4-L30) and [`get_next_entry_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L32-L44)) maintain globally unique integer identifiers across all resume sections (`work_experience`, `projects`, `leadership`, `education`, `certifications`, `skills`).
 
 ### 7.2 Implementation Nuances & Planned Roadmap
 1. **Planned ATS Optimization Node**:
@@ -732,6 +1029,8 @@ class RegeneratedBulletsList(BaseModel):
    - In [`regenerate_bullets`](file:///D:/Documents/resume-agent/backend/agent/nodes/tailor_agent.py#L380-L385), proposals in `state["tailor_analysis"]` are mutated in-place before returning `state`. Because Python objects in memory are modified, LangGraph persists the updated state snapshot correctly, but returning an explicit state dict update `{ "tailor_analysis": updated_analysis }` is often preferred for functional purity.
 3. **Working Directory Dependency for SQLite DB (`main.py:L29`)**:
    - The connection string is hardcoded as relative path `"backend/data/app.db"`. The server must be executed from the workspace root (`resume-agent`).
+4. **`delete_entry` Section Scoping**:
+   - [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L106-L141) scans all list-based sections for matching `entry_id`. Because `assign_entry_ids` assigns sequential IDs starting from 0, entry IDs must remain distinct across sections to prevent collisions.
 
 ---
 
@@ -747,8 +1046,13 @@ class RegeneratedBulletsList(BaseModel):
      - `investigation_chat`: Conversational message thread with freeform text answer input.
 3. **Completed Result Presentation**:
    - When `ai_response.stage == "completed"`, the frontend displays:
-     - `tailor_matched_list`: Before-and-after bullet comparisons (`old_bullet_points` vs `new_bullet_points`), action type (`KEEP`/`MODIFY`/`ADD`), and reasoning.
+     - `tailor_matched_list`: Before-and-after bullet comparisons (`old_bullet` vs `new_bullet`), action type (`KEEP`/`MODIFY`/`ADD`), and reasoning.
      - `tailor_unmatched_list`: Proposed new experiences or projects with company, title, duration, skills, and new XYZ bullets.
      - `feedbacks`: Verification confirmation confirming zero hallucinated claims.
-4. **CORS & Service Integration**:
+4. **Interactive Tailoring & Working Resume Editing**:
+   - The frontend UI can allow the candidate to tweak proposed bullet text prior to merging via `POST /tailor/custom-tailoring`.
+   - The candidate applies a tailored topic via `POST /tailor/apply-tailoring`, receiving the updated `resume_to_edit` in response.
+   - The candidate can edit existing bullets directly in the working resume via `POST /tailor/edit-resume-bullets`.
+   - The candidate can delete individual bullets or entire entries via `POST /tailor/delete-bullet` and `POST /tailor/delete-entry`.
+5. **CORS & Service Integration**:
    - Backend runs on `http://localhost:8000` with CORS configured for `http://localhost:3000`.
