@@ -3,6 +3,8 @@
 import { AppPhase, JobDetails } from "@/lib/types";
 import { Sparkles, RotateCcw, FileText, CheckCircle2, MessageSquare, Wand2, ArrowRight } from "lucide-react";
 
+import Link from "next/link";
+
 interface HeaderProps {
   phase: AppPhase;
   sessionId: string | null;
@@ -25,21 +27,21 @@ export function Header({ phase, sessionId, jobDetails, onResetSession }: HeaderP
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/80 print:hidden">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand */}
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 group transition-opacity hover:opacity-90">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900">
-            <Sparkles className="h-5 w-5" />
+            <Sparkles className="h-5 w-5 text-emerald-400 dark:text-emerald-600" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-                Resume Co-Pilot
+                ResiAgent
               </span>
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 Evidence-Based
               </span>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Phase Stepper Breadcrumb */}
         <nav aria-label="Progress" className="hidden md:flex items-center gap-1.5">
