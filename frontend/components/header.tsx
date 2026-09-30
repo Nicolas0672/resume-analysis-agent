@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { AppPhase, JobDetails } from "@/lib/types";
-import { Sparkles, RotateCcw, FileText, CheckCircle2, MessageSquare, Wand2, ArrowRight } from "lucide-react";
-
+import { Sparkles, RotateCcw, FileText, CheckCircle2, MessageSquare, Wand2, ArrowRight, LogOut, User } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 interface HeaderProps {
   phase: AppPhase;
@@ -21,7 +23,33 @@ const PHASES: Array<{ id: AppPhase; label: string; icon: typeof FileText }> = [
 ];
 
 export function Header({ phase, sessionId, jobDetails, onResetSession }: HeaderProps) {
+  const router = useRouter();
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === phase);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user?.email) {
+          setUserEmail(data.user.email);
+        }
+      });
+    } catch {
+      // Supabase envs might be unset during initial config
+    }
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/");
+      router.refresh();
+    } catch {
+      router.push("/");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/80 print:hidden">
@@ -96,6 +124,26 @@ export function Header({ phase, sessionId, jobDetails, onResetSession }: HeaderP
               <RotateCcw className="h-3.5 w-3.5 text-zinc-400" />
               <span>New Session</span>
             </button>
+          )}
+
+          {userEmail && (
+            <div className="flex items-center gap-2 pl-2 border-l border-zinc-200 dark:border-zinc-800">
+              <div
+                title={userEmail}
+                className="hidden sm:flex items-center gap-1.5 rounded-full bg-stone-100 dark:bg-zinc-800 px-2.5 py-1 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 max-w-[160px] truncate"
+              >
+                <User className="h-3 w-3 text-emerald-600 shrink-0" />
+                <span className="truncate">{userEmail}</span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                title="Sign out of ResiAgent"
+                className="cursor-pointer inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-zinc-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-rose-400 transition-all shadow-2xs"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline text-[11px]">Sign Out</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

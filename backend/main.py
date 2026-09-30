@@ -13,8 +13,13 @@ from fastapi import FastAPI
 from backend.api.resume import router as resume_router
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.repository.resume_repository import init_db
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize Supabase tables
+    init_db()
+
     async with AsyncSqliteSaver.from_conn_string(
         "backend/data/app.db"
     ) as memory:

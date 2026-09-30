@@ -49,7 +49,8 @@ class ResumeLeadership(BaseModel):
     title: str
     position: Optional[str]
     bullets: list[ResumeBullet] = Field(default_factory=list)
-
+    location: Optional[str] = None
+    duration: Optional[str] = None
 
 class ResumeEducation(BaseModel):
     entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
@@ -68,9 +69,11 @@ class ResumeEducation(BaseModel):
 class ResumeProject(BaseModel):
     entry_id: Annotated[int | None, SkipJsonSchema[None]] = None    
     project_name: Optional[str] = None
-    technologies: Optional[list[str]] = None
+    technologies: Optional[list[str]] = None 
     bullets: list[ResumeBullet] = Field(default_factory=list)
-
+    role: Optional[str] = None
+    location: Optional[str] = None
+    duration: Optional[str] = None
 
 class ResumeCertification(BaseModel):
     entry_id: Annotated[int | None, SkipJsonSchema[None]] = None    

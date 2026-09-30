@@ -8,6 +8,7 @@ import {
   SessionStateResponse,
   UploadResponse,
 } from "./types";
+import { createClient } from "./supabase/client";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/tailor";
 
@@ -16,6 +17,23 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return {
+        Authorization: `Bearer ${session.access_token}`,
+      };
+    }
+  } catch {
+    // Supabase client may not be initialized if env vars are unset
+  }
+  return {};
 }
 
 export async function uploadResume(
@@ -34,8 +52,12 @@ export async function uploadResume(
     formData.append("job_description", jobDescription.trim());
   }
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/upload`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -61,8 +83,12 @@ export async function sendChatMessage(
   formData.append("session_id", sessionId);
   formData.append("user_message", userMessage);
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/chat`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -81,8 +107,12 @@ export async function sendChatMessage(
 }
 
 export async function getSessionState(sessionId: string): Promise<SessionStateResponse> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}`, {
     method: "GET",
+    headers: {
+      ...authHeaders,
+    },
   });
 
   if (!response.ok) {
@@ -107,8 +137,12 @@ export async function applyTailoring(
   formData.append("session_id", sessionId);
   formData.append("topic_id", topicId);
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/apply-tailoring`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -138,8 +172,12 @@ export async function customTailoring(
   formData.append("sentence_id", sentenceId.toString());
   formData.append("new_text", newText);
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/custom-tailoring`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -167,8 +205,12 @@ export async function editResumeBullet(
   formData.append("sentence_id", sentenceId.toString());
   formData.append("new_text", newText);
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/edit-resume-bullets`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -194,8 +236,12 @@ export async function deleteBullet(
   formData.append("session_id", sessionId);
   formData.append("sentence_id", sentenceId.toString());
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/delete-bullet`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 
@@ -221,8 +267,12 @@ export async function deleteEntry(
   formData.append("session_id", sessionId);
   formData.append("entry_id", entryId.toString());
 
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/delete-entry`, {
     method: "POST",
+    headers: {
+      ...authHeaders,
+    },
     body: formData,
   });
 

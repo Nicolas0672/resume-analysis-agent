@@ -38,3 +38,45 @@ button[disabled],
 [aria-disabled="true"] {
   cursor: not-allowed !important;
 }
+
+/* Fluid Animations */
+@keyframes creepPulse {
+  0%, 100% {
+    opacity: 0.08;
+    transform: scale(0.8) translate(0, 0);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.25) translate(2px, -3px);
+  }
+}
+
+@keyframes textShimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes highlighterSweep {
+  from {
+    background-size: 0% 100%;
+  }
+  to {
+    background-size: 100% 100%;
+  }
+}
+
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: textShimmer 4s ease-in-out infinite;
+}
+
+.animate-highlighter {
+  background-image: linear-gradient(120deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 100%);
+  background-repeat: no-repeat;
+  animation: highlighterSweep 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
