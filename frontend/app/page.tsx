@@ -23,6 +23,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
+import { ResiLogo } from "@/components/logo";
 
 // Reusable scroll reveal wrapper with staggered transition delays
 function ScrollReveal({
@@ -154,9 +155,7 @@ export default function HomePage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Brand */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-xs group-hover:bg-zinc-800 transition-colors">
-              <Sparkles className="h-4.5 w-4.5 text-emerald-400" />
-            </div>
+            <ResiLogo size={20} className="h-9 w-9 group-hover:border-emerald-500/50" />
             <div className="flex items-center gap-2">
               <span className="font-semibold text-base tracking-tight text-zinc-900">
                 ResiAgent

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Mail, Lock } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle2, Loader2, Mail, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ResiLogo } from "@/components/logo";
 
 // Deterministic constellation dots matching the homepage aesthetic
 const CONSTELLATION_DOTS = [
@@ -151,9 +152,7 @@ export default function AuthPage() {
         </Link>
 
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-xs">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-          </div>
+          <ResiLogo size={16} className="h-7 w-7" />
           <span className="font-semibold text-sm tracking-tight text-zinc-900">
             ResiAgent
           </span>

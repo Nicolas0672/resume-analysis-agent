@@ -327,4 +327,16 @@ export interface DeleteEntryResponse {
   resume_to_edit?: ResumeStructure;
 }
 
+export interface UserSessionSummary {
+  session_id: string;
+  job_title: string | null;
+  job_company: string | null;
+  created_at: string | null;
+}
+
+export interface UserSessionsResponse {
+  success: boolean;
+  sessions: UserSessionSummary[];
+}
+
 export type AppPhase = "setup" | "verification" | "interview" | "tailor" | "compare";

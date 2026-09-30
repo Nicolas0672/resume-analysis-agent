@@ -764,5 +764,6 @@ export function useTailoringSession() {
     handleFinishProposalReview,
     handleBackToTailoring,
     handleResetSession,
+    rehydrateSession,
   };
 }

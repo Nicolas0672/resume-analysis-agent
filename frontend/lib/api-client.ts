@@ -7,6 +7,7 @@ import {
   EditBulletResponse,
   SessionStateResponse,
   UploadResponse,
+  UserSessionsResponse,
 } from "./types";
 import { createClient } from "./supabase/client";
 
@@ -289,3 +290,27 @@ export async function deleteEntry(
 
   return response.json();
 }
+
+export async function getUserSessions(): Promise<UserSessionsResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/sessions`, {
+    method: "GET",
+    headers: {
+      ...authHeaders,
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to retrieve user sessions";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
