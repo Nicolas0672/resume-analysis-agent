@@ -21,6 +21,7 @@ import {
 import { getUserSessions } from "@/lib/api-client";
 import { UserSessionSummary } from "@/lib/types";
 import { ResiLogo } from "@/components/logo";
+import { CompanyLogo } from "@/components/company-logo";
 
 interface DropzoneProps {
   isLoading: boolean;
@@ -565,14 +566,17 @@ export function Dropzone({
                       key={sess.session_id}
                       className="group rounded-xl border border-stone-200/80 bg-stone-50/50 p-3.5 hover:bg-white hover:border-stone-300 transition-all shadow-2xs hover:shadow-xs flex flex-col justify-between"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-semibold text-zinc-900 group-hover:text-emerald-800 transition-colors line-clamp-1">
-                            {sess.job_title || "General Tailoring Run"}
-                          </p>
-                          <p className="text-[11px] text-stone-600 line-clamp-1 mt-0.5">
-                            {sess.job_company ? `@ ${sess.job_company}` : "Custom Target Specification"}
-                          </p>
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <CompanyLogo company={sess.job_company} size={20} className="mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-zinc-900 group-hover:text-emerald-800 transition-colors line-clamp-1">
+                              {sess.job_title || "General Tailoring Run"}
+                            </p>
+                            <p className="text-[11px] text-stone-600 line-clamp-1 mt-0.5">
+                              {sess.job_company ? `@ ${sess.job_company}` : "Custom Target Specification"}
+                            </p>
+                          </div>
                         </div>
                         <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-[9px] font-mono text-stone-500 border border-stone-200">
                           #{sess.session_id.slice(0, 6)}

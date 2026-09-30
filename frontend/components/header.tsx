@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { AppPhase, JobDetails } from "@/lib/types";
 import { ResiLogo } from "@/components/logo";
+import { CompanyLogo } from "@/components/company-logo";
 import {
   RotateCcw,
   CheckCircle2,
@@ -153,7 +154,7 @@ export function Header({ phase, sessionId, jobDetails, onResetSession }: HeaderP
           {/* Active Job Target Chip */}
           {jobDetails && isInFlight && (
             <div className="hidden xl:flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-zinc-800 shadow-2xs">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <CompanyLogo company={jobDetails.job_company} size={14} />
               <span className="font-medium truncate max-w-[140px]">{jobDetails.job_title}</span>
               <span className="text-stone-400">@</span>
               <span className="text-stone-600 truncate max-w-[100px]">{jobDetails.job_company}</span>

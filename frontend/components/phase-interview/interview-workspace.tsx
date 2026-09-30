@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { ChatMessage } from "@/hooks/use-tailoring-session";
 import { useRotatingPhrase, SYNTHESIZING_PHRASES } from "@/hooks/use-rotating-phrase";
+import { CompanyLogo } from "@/components/company-logo";
 import {
   CheckCircle2,
   AlertCircle,
@@ -187,8 +188,9 @@ export function InterviewWorkspace({
             {/* Slide-out Job Drawer Preview */}
             {showJobDrawer && jobDetails && (
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950/60 border-b border-zinc-200 dark:border-zinc-800 text-xs space-y-2">
-                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  {jobDetails.job_title} @ {jobDetails.job_company}
+                <div className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
+                  <CompanyLogo company={jobDetails.job_company} size={16} />
+                  <span>{jobDetails.job_title} @ {jobDetails.job_company}</span>
                 </div>
                 <div className="text-zinc-600 dark:text-zinc-400 max-h-36 overflow-y-auto pr-1 text-[11px]">
                   {jobDetails.job_requirements.join(" • ")}

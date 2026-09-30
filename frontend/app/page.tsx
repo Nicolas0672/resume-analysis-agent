@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Sparkles,
   ArrowRight,
   CheckCircle2,
   AlertCircle,
@@ -24,6 +23,7 @@ import {
 } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
 import { ResiLogo } from "@/components/logo";
+import { CompanyLogo } from "@/components/company-logo";
 
 // Reusable scroll reveal wrapper with staggered transition delays
 function ScrollReveal({
@@ -349,9 +349,9 @@ export default function HomePage() {
             {/* Active Session Metadata Bar */}
             <div className="px-5 py-2.5 bg-stone-100/70 border-b border-stone-200/80 flex items-center justify-between text-[11px] font-mono text-zinc-600">
               <div className="flex items-center gap-2">
-                <Activity className="h-3.5 w-3.5 text-emerald-600 shrink-0 animate-pulse" />
+                <CompanyLogo company="Microsoft" size={14} />
                 <span>
-                  <strong className="text-zinc-800 font-semibold">SESSION CONTEXT:</strong> Target: Senior Backend Engineer · Gap: High-Throughput Streaming & SLA
+                  <strong className="text-zinc-800 font-semibold">SESSION CONTEXT:</strong> Target: Software Engineering Intern @ Microsoft · Gap: React/TypeScript & User-Facing Impact
                 </span>
               </div>
 
@@ -368,13 +368,14 @@ export default function HomePage() {
                         <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500 font-mono">
                           TARGET ROLE SPECIFICATION
                         </span>
-                        <span className="rounded bg-stone-200 px-2 py-0.5 text-[10px] text-zinc-700 font-mono font-medium">
-                          Senior Backend Engineer
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-stone-200 px-2.5 py-0.5 text-[10px] text-zinc-800 font-mono font-medium shadow-2xs">
+                          <CompanyLogo company="Microsoft" size={12} />
+                          <span>Microsoft · SWE Intern</span>
                         </span>
                       </div>
                       <div className="text-xs text-zinc-800 leading-relaxed font-mono bg-white p-3.5 rounded-lg border border-stone-200 shadow-2xs relative">
-                        <span className="text-[10px] text-stone-400 absolute top-2 right-2 font-mono">#REQ-04</span>
-                        &quot;Must possess proven experience building high-throughput distributed event streaming systems (Kafka), handling latency-sensitive data pipelines, and optimizing consumer lag to meet strict P99 SLAs.&quot;
+                        <span className="text-[10px] text-stone-400 absolute top-2 right-2 font-mono">#REQ-02</span>
+                        &quot;Must demonstrate experience developing responsive web applications using React and TypeScript, integrating RESTful APIs, and optimizing client-side performance for real campus or production users.&quot;
                       </div>
                     </div>
 
@@ -383,10 +384,10 @@ export default function HomePage() {
                         <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500 font-mono">
                           BASELINE RESUME ENTRY
                         </span>
-                        <span className="text-[10px] text-stone-400 font-mono">#L28</span>
+                        <span className="text-[10px] text-stone-400 font-mono">#L18</span>
                       </div>
                       <div className="text-xs text-zinc-500 font-mono bg-white p-3.5 rounded-lg border border-stone-200 line-through decoration-zinc-400 shadow-2xs">
-                        • &quot;Maintained backend microservices and data pipelines for customer analytics.&quot;
+                        • &quot;Helped build frontend web pages in React for a student club portal and connected backend APIs.&quot;
                       </div>
                     </div>
                   </div>
@@ -401,20 +402,20 @@ export default function HomePage() {
                         </span>
                       </div>
                       <p className="text-xs text-amber-900 leading-relaxed font-medium">
-                        The candidate worked on the analytics pipeline, but the existing resume bullet is too generic. The agent flagged 3 unstated proofs:
+                        The student built features for the campus portal, but the bullet is passive (&quot;Helped build...&quot;) and hides their technical ownership. The agent flagged 3 unstated proofs:
                       </p>
                       <ul className="mt-3 space-y-2 text-xs text-amber-900">
                         <li className="flex items-start gap-2 bg-white/70 p-2 rounded border border-amber-200/60 shadow-2xs">
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
-                          <span><strong>Broker Architecture:</strong> Did you run Kafka, RabbitMQ, or batch cron?</span>
+                          <span><strong>Component Architecture:</strong> Did you use TypeScript, reusable hooks, or custom state?</span>
                         </li>
                         <li className="flex items-start gap-2 bg-white/70 p-2 rounded border border-amber-200/60 shadow-2xs">
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
-                          <span><strong>Quantified Scale:</strong> What was peak event throughput per second?</span>
+                          <span><strong>Data Flow & Speed:</strong> How did you handle API fetching? Any debouncing or caching?</span>
                         </li>
                         <li className="flex items-start gap-2 bg-white/70 p-2 rounded border border-amber-200/60 shadow-2xs">
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
-                          <span><strong>SLA Impact:</strong> What was the concrete P99 latency reduction delta?</span>
+                          <span><strong>Real-World Impact:</strong> How many students used it, and did search/load speeds improve?</span>
                         </li>
                       </ul>
                     </div>
@@ -440,17 +441,15 @@ export default function HomePage() {
                 <div className="space-y-4">
                   {/* Co-Author Message */}
                   <div className="flex items-start gap-3 max-w-2xl">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-xs">
-                      <Sparkles className="h-4 w-4 text-emerald-400" />
-                    </div>
+                    <ResiLogo size={16} className="h-8 w-8 shrink-0" />
                     <div className="rounded-2xl rounded-tl-sm border border-stone-200 bg-white p-4 text-xs shadow-2xs">
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="font-semibold text-emerald-800 font-mono">ResiAgent Interviewer Node</span>
-                        <span className="text-[10px] text-zinc-400 font-mono">Targeting Gap #REQ-04</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">Targeting Gap #REQ-02</span>
                       </div>
                       <p className="text-zinc-800 leading-relaxed font-sans text-xs">
-                        &quot;You mentioned maintaining the analytics data pipeline. The target role requires experience with high-throughput Kafka streaming and latency optimization. 
-                        <strong className="text-zinc-950"> What specific technologies did you use, what was the message throughput, and did you tune consumer rebalances or partitions to hit an SLA?</strong>&quot;
+                        &quot;You mentioned helping build frontend features for the student club portal in React. The target internship requires hands-on experience with TypeScript and optimizing real API data workflows. 
+                        <strong className="text-zinc-950"> What specific pages or components did you own, how did you handle data loading, and did you measure campus user adoption or load speeds?</strong>&quot;
                       </p>
                     </div>
                   </div>
@@ -465,7 +464,7 @@ export default function HomePage() {
                         <span className="font-semibold text-zinc-700 font-mono text-[10px]">Verified Candidate Answer</span>
                       </div>
                       <p className="text-emerald-950 leading-relaxed text-left font-mono text-[11px]">
-                        &quot;We ran a 12-node Kafka cluster. I tuned partition rebalances and batch consumer groups to handle 45,000 events/sec peak, which reduced P99 latency from 180ms down to 110ms (a 38% reduction) and eliminated message drops.&quot;
+                        &quot;I built the student course evaluation dashboard in React and TypeScript. I replaced full-page re-renders with client-side caching and debounced search, which dropped search load times from 2.4s to under 400ms across 1,800+ active campus students.&quot;
                       </p>
                     </div>
                   </div>
@@ -475,13 +474,13 @@ export default function HomePage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[11px] font-semibold text-zinc-700 font-mono">Facts Verified:</span>
                       <span className="rounded-md bg-white border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-800 font-medium shadow-2xs">
-                        Apache Kafka (12 nodes)
+                        React + TypeScript Dashboard
                       </span>
                       <span className="rounded-md bg-white border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-800 font-medium shadow-2xs">
-                        45,000 events/sec peak
+                        1,800+ Active Campus Students
                       </span>
                       <span className="rounded-md bg-white border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-800 font-medium shadow-2xs">
-                        38% P99 latency cut (sub-110ms)
+                        Search Latency Cut: 2.4s → 400ms (83% faster)
                       </span>
                     </div>
 
@@ -502,49 +501,49 @@ export default function HomePage() {
                   <div className="lg:col-span-6 flex flex-col justify-between rounded-xl border border-stone-200 bg-stone-50/70 p-5">
                     <div>
                       <div className="flex items-center justify-between text-xs text-zinc-500 mb-2 font-mono">
-                        <span>ORIGINAL BULLET (#L28)</span>
+                        <span>ORIGINAL BULLET (#L18)</span>
                         <span className="text-zinc-500">Unmodified</span>
                       </div>
                       <div className="p-4 rounded-lg bg-white border border-stone-200 font-mono text-xs text-zinc-600 leading-relaxed shadow-2xs">
-                        • Maintained backend microservices and data pipelines for customer analytics.
+                        • Helped build frontend web pages in React for a student club portal and connected backend APIs.
                       </div>
                       <p className="mt-3 text-[11px] text-zinc-500">
-                        Lacks the candidate&apos;s real throughput metrics and fails the primary Kafka requirement.
+                        Lacks concrete ownership, hides TypeScript usage, and omits the 1,800+ student user impact.
                       </p>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-stone-200 flex items-center justify-between text-xs text-zinc-600">
                       <span>Baseline Job Fit Match</span>
-                      <strong className="text-zinc-700 font-mono">32% Match</strong>
+                      <strong className="text-zinc-700 font-mono">34% Match</strong>
                     </div>
                   </div>
 
                   <div className="lg:col-span-6 flex flex-col justify-between rounded-xl border border-emerald-300 bg-emerald-50/30 p-5 relative">
-                    {/* Senior Designer Editorial Margin Note */}
+                    {/* Editorial Margin Note */}
                     <div className="mb-3 flex items-center gap-1.5 text-[10px] font-mono text-emerald-900 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-md shadow-2xs">
-                      <Sparkles className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
-                      <span>Co-Author Note: Replaced passive duty with quantified Kafka throughput and P99 latency SLA reduction.</span>
+                      <ResiLogo size={12} className="h-4 w-4 shrink-0" />
+                      <span>Co-Author Note: Upgraded passive phrasing (&apos;Helped build...&apos;) to demonstrable ownership, verified TypeScript stack, and quantified 83% latency cut across 1,800+ campus users.</span>
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between text-xs text-emerald-800 mb-2 font-mono">
-                        <span>SURGICAL PROPOSAL (#L28)</span>
+                        <span>SURGICAL PROPOSAL (#L18)</span>
                         <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-800 font-sans font-medium border border-emerald-200">
                           100% Verifiable Context
                         </span>
                       </div>
                       <div className="p-4 rounded-lg bg-white border border-emerald-300 font-mono text-xs text-zinc-900 leading-relaxed shadow-2xs">
-                        • Architected and tuned <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">12-node Apache Kafka consumer pipelines</span> processing <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">45,000+ events/sec</span>, reducing P99 latency by <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">38%</span> to consistently beat sub-110ms analytics SLAs.
+                        • Engineered interactive student evaluation dashboard in <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">React and TypeScript</span> with debounced search queries and client-side caching, slashing search response times by <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">83% (2.4s → 400ms)</span> for <span className="animate-highlighter text-emerald-950 font-semibold px-1 py-0.5 rounded">1,800+ campus users</span>.
                       </div>
                       <p className="mt-3 text-[11px] text-emerald-800 font-medium">
-                        Directly targets role criteria using only facts verified in the interview. Exact Word formatting preserved.
+                        Directly targets internship criteria using only facts verified in the interview. Exact Word formatting preserved.
                       </p>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-emerald-200 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 text-emerald-800 font-medium">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        <span>ATS Alignment: <strong className="text-emerald-900 font-mono">96%</strong></span>
+                        <span>ATS Alignment: <strong className="text-emerald-900 font-mono">95%</strong></span>
                       </div>
                       <Link
                         href="/app"
@@ -846,9 +845,9 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="relative z-10 border-t border-stone-200 bg-white py-8 text-xs text-zinc-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-            <span className="font-semibold text-zinc-800">ResiAgent</span>
+          <div className="flex items-center gap-2.5">
+            <ResiLogo size={14} className="h-6 w-6" />
+            <span className="font-semibold text-zinc-800 text-sm">ResiAgent</span>
             <span className="text-stone-300">·</span>
             <span>&ldquo;Never fake it. Prove it.&rdquo;</span>
           </div>

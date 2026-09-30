@@ -9,6 +9,7 @@ import {
   JobDetails,
 } from "@/lib/types";
 import { useRotatingPhrase, SYNTHESIZING_PHRASES } from "@/hooks/use-rotating-phrase";
+import { CompanyLogo } from "@/components/company-logo";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -200,8 +201,8 @@ export function SplitVerification({
                   {jobDetails.job_title}
                 </h3>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                  <div className="flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5 text-zinc-400" />
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <CompanyLogo company={jobDetails.job_company} size={15} />
                     <span>{jobDetails.job_company}</span>
                   </div>
                   {jobDetails.job_location && (
