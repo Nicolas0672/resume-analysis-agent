@@ -24,10 +24,12 @@ def route_investigation_or_tailoring(state: AgentState):
 
 def router_to_generate(state: AgentState):
     if state["iteration_loop"] < 4:
-        for feedback in state["feedbacks"].feedbacks:
+        feedbacks = state["feedbacks"].model_dump()
 
-            for bullet_feedback in feedback["bullet_feedbacks"]:
-                if not bullet_feedback["valid"]:
-                    return "regenerate"
+        for feedback in feedbacks["feedbacks"]:
+            if feedback["bullet_feedbacks"] is not None:
+                for bullet_feedback in feedback["bullet_feedbacks"]:
+                    if not bullet_feedback["valid"]:
+                        return "regenerate"
 
     return "done"
