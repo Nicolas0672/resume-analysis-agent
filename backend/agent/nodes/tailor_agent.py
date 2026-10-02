@@ -7,7 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 async def evidence_mapper(state: AgentState):
 
-    evidence_list = state["evidence_with_details"]
+    evidence_list = [evidence for evidence in state.get("evidence_with_details", []) if evidence.evidence is not None]
     resume_experience = state["resume_data"].work_experience if state["resume_data"].work_experience else "No work experience available"
     resume_projects = state["resume_data"].projects if state["resume_data"].projects else "No available project experience"
     resume_leadership = state["resume_data"].leadership if state["resume_data"].leadership else "No available leadership experience"
@@ -63,16 +63,23 @@ async def evidence_mapper(state: AgentState):
         model="gpt-4o",
         temperature=0
     )
-    llm_structured = model.with_structured_output(EvidenceMappingResult)
-    response = await llm_structured.ainvoke(prompt.format_messages(
-        resume_experience=resume_experience, resume_projects=resume_projects, evidence_list=evidence_list,
-        resume_leadership=resume_leadership
-        ))
+
+    if evidence_list:
+        llm_structured = model.with_structured_output(EvidenceMappingResult)
+        response = await llm_structured.ainvoke(
+            prompt.format_messages(
+                resume_experience=resume_experience,
+                resume_projects=resume_projects,
+                evidence_list=evidence_list,
+                resume_leadership=resume_leadership,
+            )
+        )
+    else:
+        response = EvidenceMappingResult(evidence_mappings=[])
 
     return {
         "evidence_mapping": response
     }
-
 
 async def tailor_resume_bullet_points(state: AgentState):
 
@@ -85,6 +92,8 @@ async def tailor_resume_bullet_points(state: AgentState):
 
     for current in evidence_mapping.evidence_mappings:
 
+        if current.evidence_with_details.evidence is None:
+            continue
 
         if current.mapping_status == "MATCHED":
             entry_id = current.resume_reference.entry_id

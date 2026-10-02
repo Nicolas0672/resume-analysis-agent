@@ -112,7 +112,7 @@ async def fetch_job_details(job_url: str) -> str:
         canonical_url = job_url
 
     else:
-        raise ValueError("Unsupported job URL")
+        raise ValueError("Unsupported job URL. If using a LinkedIn URL, please ensure to sign in to LinkedIn before attempting again.")
 
     job_text = await fetch_job_page(canonical_url)
     job_details = extract_page_content(job_text)
