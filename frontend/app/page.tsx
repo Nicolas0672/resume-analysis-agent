@@ -649,8 +649,8 @@ export default function HomePage() {
                   <li className="flex items-start gap-3">
                     <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
-                      <strong className="text-zinc-900 block">Preserves Document Fidelity</strong>
-                      Respects your Microsoft Word (.docx) document architecture, margins, and typography without corrupting layout.
+                      <strong className="text-zinc-900 block">Built for Recruiter Standards</strong>
+                      Every resume follows a clean, consistent format built around recruiter expectations and established industry conventions.
                     </div>
                   </li>
                 </ul>
@@ -792,9 +792,9 @@ export default function HomePage() {
                 <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-800 mb-4">
                   <FileCheck className="h-5 w-5" />
                 </div>
-                <h4 className="text-sm font-semibold text-zinc-900 mb-2">Layout & Format Protection</h4>
+                <h4 className="text-sm font-semibold text-zinc-900 mb-2">Recruiter-Ready Resume Formatting</h4>
                 <p className="text-xs text-zinc-600 leading-relaxed">
-                  Your Microsoft Word layout, margins, bullet hierarchy, and typography are preserved down to the paragraph structure.
+                  Transform your experience into a polished, industry-standard resume with consistent formatting, structure, and recruiter-friendly organization.
                 </p>
               </div>
             </ScrollReveal>
