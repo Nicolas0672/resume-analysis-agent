@@ -31,7 +31,7 @@ from services.resume_service import (
 from api.auth import get_current_user, verify_session_ownership
 from repository.resume_repository import create_user_session, get_user_sessions
 
-router = APIRouter(prefix="api/tailor")
+router = APIRouter(prefix="/api/tailor")
 
 
 @router.post("/upload")
