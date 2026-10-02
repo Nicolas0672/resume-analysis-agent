@@ -6,7 +6,7 @@ from jwt import PyJWKClient, PyJWKClientError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from dotenv import load_dotenv
-from backend.repository.resume_repository import check_session_owner
+from repository.resume_repository import check_session_owner
 
 load_dotenv()
 

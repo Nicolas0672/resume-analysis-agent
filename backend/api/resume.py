@@ -4,8 +4,8 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, D
 from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
-from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
-from backend.model.job_pydantic import (
+from agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
+from model.job_pydantic import (
     AddBulletRequest,
     AddEntryRequest,
     EditEntryRequest,
@@ -13,9 +13,9 @@ from backend.model.job_pydantic import (
     ResumeStructure,
     UpdateResumeRequest,
 )
-from backend.services.docx_exporter import generate_docx
-from backend.services.pdf_exporter import generate_pdf
-from backend.services.resume_service import (
+from services.docx_exporter import generate_docx
+from services.pdf_exporter import generate_pdf
+from services.resume_service import (
     add_resume_bullet,
     add_resume_entry,
     apply_tailored_bullets,
@@ -28,8 +28,8 @@ from backend.services.resume_service import (
     update_full_resume,
     update_resume_entry,
 )
-from backend.api.auth import get_current_user, verify_session_ownership
-from backend.repository.resume_repository import create_user_session, get_user_sessions
+from api.auth import get_current_user, verify_session_ownership
+from repository.resume_repository import create_user_session, get_user_sessions
 
 router = APIRouter(prefix="api/tailor")
 

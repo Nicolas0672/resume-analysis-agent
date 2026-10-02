@@ -2,7 +2,7 @@ import io
 import pytest
 from docx import Document
 
-from backend.model.job_pydantic import (
+from model.job_pydantic import (
     ResumeBullet,
     ResumeEducation,
     ResumeExperience,
@@ -11,8 +11,8 @@ from backend.model.job_pydantic import (
     ResumeSkills,
     ResumeStructure,
 )
-from backend.services.docx_exporter import generate_docx
-from backend.services.pdf_exporter import generate_pdf
+from services.docx_exporter import generate_docx
+from services.pdf_exporter import generate_pdf
 
 
 def sample_resume():

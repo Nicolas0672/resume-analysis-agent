@@ -1,5 +1,5 @@
-from backend.agent.model import EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks, RegeneratedBullets, RegeneratedBulletsList, ResumeReference, TailorAnalysis, TailorMatchList, TailorMatched, TailorUnmatched, TailorUnmatchedList
-from backend.agent.state import AgentState
+from agent.model import EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks, RegeneratedBullets, RegeneratedBulletsList, ResumeReference, TailorAnalysis, TailorMatchList, TailorMatched, TailorUnmatched, TailorUnmatchedList
+from agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI

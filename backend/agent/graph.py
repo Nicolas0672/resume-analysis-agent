@@ -5,16 +5,16 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import ToolNode
 from enum import Enum
 
-from backend.agent.nodes.human_decision import human_after_analysis, human_after_interview_planner, human_investigate_chat
-from backend.agent.nodes.interview import investigate_candidate, reset_investigation
-from backend.agent.nodes.interview_planner import interview_agent
-from backend.agent.nodes.tailor_agent import critique_tailored_bullet_points, evidence_mapper, regenerate_bullets, tailor_resume_bullet_points
-from backend.agent.router import route_investigation_or_tailoring, router_after_analysis, router_to_generate, router_to_stop_investigation
-from backend.agent.state import AgentState
-from backend.agent.nodes.analyzation import analyze_candidate
+from agent.nodes.human_decision import human_after_analysis, human_after_interview_planner, human_investigate_chat
+from agent.nodes.interview import investigate_candidate, reset_investigation
+from agent.nodes.interview_planner import interview_agent
+from agent.nodes.tailor_agent import critique_tailored_bullet_points, evidence_mapper, regenerate_bullets, tailor_resume_bullet_points
+from agent.router import route_investigation_or_tailoring, router_after_analysis, router_to_generate, router_to_stop_investigation
+from agent.state import AgentState
+from agent.nodes.analyzation import analyze_candidate
 import sqlite3
 
-from backend.model.job_pydantic import ResumeBullet, ResumeExperience, ResumeLeadership, ResumeProject
+from model.job_pydantic import ResumeBullet, ResumeExperience, ResumeLeadership, ResumeProject
 
 class NodesNames(str, Enum):
     ANALYZE_CANDIDATE = "analyze_candidate"

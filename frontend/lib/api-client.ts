@@ -476,7 +476,7 @@ export async function addResumeEntry(
 }
 
 /**
- * Downloads the exported PDF or DOCX file directly from the backend.
+ * Downloads the exported PDF or DOCX file directly from the 
  */
 export async function downloadResumeFile(
   endpoint: "pdf" | "docx",

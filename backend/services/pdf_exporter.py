@@ -18,7 +18,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from backend.model.job_pydantic import (
+from model.job_pydantic import (
     ResumeEducation,
     ResumeExperience,
     ResumeLeadership,

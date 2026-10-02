@@ -1,6 +1,6 @@
 import re
 from typing import Any
-from backend.model.job_pydantic import ResumeStructure
+from model.job_pydantic import ResumeStructure
 
 
 MONTHS_MAP = {

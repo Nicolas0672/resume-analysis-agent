@@ -1,4 +1,4 @@
-from backend.agent.state import AgentState
+from agent.state import AgentState
 
 
 def router_after_analysis(state: AgentState):

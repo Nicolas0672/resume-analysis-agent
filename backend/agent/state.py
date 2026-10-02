@@ -4,8 +4,8 @@ from typing import Annotated, List, Literal, Optional, Sequence, TypedDict
 from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
 
-from backend.agent.model import CandidateAnalysis, Evidence, EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks,InterviewPlan, TailorAnalysis
-from backend.model.job_pydantic import JobDetails, ResumeStructure
+from agent.model import CandidateAnalysis, Evidence, EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks,InterviewPlan, TailorAnalysis
+from model.job_pydantic import JobDetails, ResumeStructure
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]

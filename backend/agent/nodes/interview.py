@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI
 
-from backend.agent.model import EvidenceWithDetails, InvestigateOutput
-from backend.agent.state import AgentState
+from agent.model import EvidenceWithDetails, InvestigateOutput
+from agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, RemoveMessage
 from langchain_google_genai import ChatGoogleGenerativeAI

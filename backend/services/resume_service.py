@@ -1,7 +1,7 @@
 
 from fastapi import HTTPException, Request
 
-from backend.model.job_pydantic import (
+from model.job_pydantic import (
     ResumeBullet,
     ResumeCertification,
     ResumeEducation,
@@ -11,15 +11,15 @@ from backend.model.job_pydantic import (
     ResumeSkills,
     ResumeStructure,
 )
-from backend.services.helper import (
+from services.helper import (
     get_next_entry_id,
     get_next_sentence_id,
     insert_entry_in_reverse_chronological_order,
     sort_section_in_reverse_chronological_order,
 )
-from backend.services.resume_pre_llm import structure_resume_data, validate_job_details
-from backend.services.job_fetcher import fetch_job_details
-from backend.services.document_parser import open_docx, parse_docx, parse_resume
+from services.resume_pre_llm import structure_resume_data, validate_job_details
+from services.job_fetcher import fetch_job_details
+from services.document_parser import open_docx, parse_docx, parse_resume
 
 
 async def process_resume_analysis(

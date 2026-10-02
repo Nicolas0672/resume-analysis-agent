@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from backend.model.job_pydantic import (
+from model.job_pydantic import (
     ResumeBullet,
     ResumeCertification,
     ResumeEducation,
@@ -10,19 +10,19 @@ from backend.model.job_pydantic import (
     ResumeSkills,
     ResumeStructure,
 )
-from backend.agent.model import (
+from agent.model import (
     TailorAnalysis,
     TailorUnmatched,
     TailorDecisionUnmatched,
 )
-from backend.services.helper import (
+from services.helper import (
     assign_entry_ids,
     get_duration_sort_key,
     get_next_entry_id,
     get_next_sentence_id,
     insert_entry_in_reverse_chronological_order,
 )
-from backend.services.resume_service import (
+from services.resume_service import (
     add_resume_bullet,
     add_resume_entry,
     apply_tailored_bullets,

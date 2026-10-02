@@ -1,6 +1,6 @@
 from langgraph.types import interrupt
 
-from backend.agent.state import AgentState
+from agent.state import AgentState
 from langchain_core.messages import HumanMessage
 
 def human_after_analysis(state: AgentState):
