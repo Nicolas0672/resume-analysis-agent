@@ -193,6 +193,7 @@ export function EditorialDebrief({
     const ids: number[] = [];
     selectedTopic.matchedProposals.forEach((m) => {
       m.decisions.forEach((d) => {
+        if (d.action?.toUpperCase() === "KEEP") return;
         if (d.new_bullet?.sentence_id !== undefined) {
           ids.push(d.new_bullet.sentence_id);
         }
@@ -391,9 +392,30 @@ export function EditorialDebrief({
             </div>
 
             {/* Matched Proposals */}
+            {(() => {
+              const hasVisibleModifications =
+                selectedTopic.matchedProposals.some((m) =>
+                  m.decisions.some((d) => d.action?.toUpperCase() !== "KEEP")
+                ) || selectedTopic.unmatchedProposals.length > 0;
+
+              if (!hasVisibleModifications) {
+                return (
+                  <div className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 p-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    Existing resume bullets already satisfy this requirement. No wording modifications needed.
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
+
             {selectedTopic.matchedProposals.map((matched, mIdx) => (
               <div key={mIdx} className="space-y-3">
                 {matched.decisions.map((decision, dIdx) => {
+                  if (decision.action?.toUpperCase() === "KEEP") {
+                    return null;
+                  }
+
                   const sentenceId = decision.new_bullet?.sentence_id;
                   const isEditingThis = sentenceId !== undefined && editingSentenceId === sentenceId;
 

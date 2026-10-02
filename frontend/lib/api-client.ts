@@ -1,11 +1,19 @@
 import {
+  AddBulletResponse,
+  AddEntryResponse,
   ApplyTailoringResponse,
   ChatResponse,
   CustomTailoringResponse,
   DeleteBulletResponse,
   DeleteEntryResponse,
   EditBulletResponse,
+  EditEntryPayload,
+  EditEntryResponse,
+  EditSkillsResponse,
+  ResumeSkills,
+  ResumeStructure,
   SessionStateResponse,
+  UpdateResumeResponse,
   UploadResponse,
   UserSessionsResponse,
 } from "./types";
@@ -23,9 +31,17 @@ export class ApiError extends Error {
 async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
     const supabase = createClient();
-    const {
+    let {
       data: { session },
     } = await supabase.auth.getSession();
+
+    // If session is temporarily pending hydration right after page navigation, retry once
+    if (!session?.access_token) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const retry = await supabase.auth.getSession();
+      session = retry.data.session;
+    }
+
     if (session?.access_token) {
       return {
         Authorization: `Bearer ${session.access_token}`,
@@ -313,4 +329,215 @@ export async function getUserSessions(): Promise<UserSessionsResponse> {
 
   return response.json();
 }
+
+export async function editResumeEntry(
+  payload: EditEntryPayload
+): Promise<EditEntryResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/edit-entry`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to edit resume entry";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function addResumeBullet(
+  sessionId: string,
+  entryId: number,
+  text: string
+): Promise<AddBulletResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/add-bullet`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify({ session_id: sessionId, entry_id: entryId, text }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to add resume bullet";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function editResumeSkills(
+  sessionId: string,
+  skills: ResumeSkills
+): Promise<EditSkillsResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/edit-skills`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify({ session_id: sessionId, skills }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to edit resume skills";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function updateFullResume(
+  sessionId: string,
+  resumeToEdit: ResumeStructure
+): Promise<UpdateResumeResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/update-resume`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify({ session_id: sessionId, resume_to_edit: resumeToEdit }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to update full resume";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function addResumeEntry(
+  sessionId: string,
+  sectionType: string,
+  entryData: Record<string, any>
+): Promise<AddEntryResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/add-entry`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      section_type: sectionType,
+      entry: entryData,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to add resume entry";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+/**
+ * Downloads the exported PDF or DOCX file directly from the backend.
+ */
+export async function downloadResumeFile(
+  endpoint: "pdf" | "docx",
+  sessionId: string,
+  candidateName?: string | null
+): Promise<void> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(
+    `${API_BASE}/export/${endpoint}?session_id=${encodeURIComponent(sessionId)}`,
+    {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let errorDetail = `Failed to export ${endpoint.toUpperCase()}`;
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  const disposition = response.headers.get("Content-Disposition");
+  let filename = `${candidateName ? candidateName.replace(/\s+/g, "_") : "Resume"}_Tailored_Resume.${endpoint}`;
+  if (disposition && disposition.includes("filename=")) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
+export async function exportResumePdf(
+  sessionId: string,
+  candidateName?: string | null
+): Promise<void> {
+  return downloadResumeFile("pdf", sessionId, candidateName);
+}
+
+export async function exportResumeDocx(
+  sessionId: string,
+  candidateName?: string | null
+): Promise<void> {
+  return downloadResumeFile("docx", sessionId, candidateName);
+}
+
+
 

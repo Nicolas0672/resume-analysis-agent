@@ -2,6 +2,7 @@ from backend.agent.model import CandidateAnalysis
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessage
 
 from datetime import date
@@ -73,6 +74,7 @@ async def analyze_candidate(state: AgentState):
 
     Do not flag availability, location, scheduling, work authorization, citizenship, start date, timing, eligibility, or semester requirements.
 
+    If job posting requires candidate to currently have a degree and candidate does not clearly have one right now based on expected grad date or missing info, flag it as missing
     ### Strength behavior
 
     Strengths should represent meaningful, evidence-backed matches to job requirements.
@@ -97,6 +99,8 @@ async def analyze_candidate(state: AgentState):
     """
     job_requirements: {job_requirements}
 
+    current_date: {current_date}
+
     Resume Data: {resume_data}
 
     Job Details: {job_details}
@@ -105,7 +109,10 @@ async def analyze_candidate(state: AgentState):
     """)
     ]
     )
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_structured = model.with_structured_output(CandidateAnalysis)
     response = await llm_structured.ainvoke(prompt.format_messages(current_date=current_date,job_details=selected, resume_data=resume_data, candidate_profile_data=candidate_profile_data, job_requirements=job_requirements))
 

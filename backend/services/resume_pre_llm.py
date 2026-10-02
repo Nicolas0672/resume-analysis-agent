@@ -3,8 +3,12 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from backend.model.job_pydantic import JobDetails, ResumeStructure
 from backend.services.helper import assign_entry_ids
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-model = ChatOpenAI(model="gpt-4o")
+model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
 
 async def validate_job_details(job_details):
     prompt = ChatPromptTemplate.from_messages([

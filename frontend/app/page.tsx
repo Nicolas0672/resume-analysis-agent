@@ -374,7 +374,6 @@ export default function HomePage() {
                         </span>
                       </div>
                       <div className="text-xs text-zinc-800 leading-relaxed font-mono bg-white p-3.5 rounded-lg border border-stone-200 shadow-2xs relative">
-                        <span className="text-[10px] text-stone-400 absolute top-2 right-2 font-mono">#REQ-02</span>
                         &quot;Must demonstrate experience developing responsive web applications using React and TypeScript, integrating RESTful APIs, and optimizing client-side performance for real campus or production users.&quot;
                       </div>
                     </div>
@@ -384,7 +383,7 @@ export default function HomePage() {
                         <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500 font-mono">
                           BASELINE RESUME ENTRY
                         </span>
-                        <span className="text-[10px] text-stone-400 font-mono">#L18</span>
+
                       </div>
                       <div className="text-xs text-zinc-500 font-mono bg-white p-3.5 rounded-lg border border-stone-200 line-through decoration-zinc-400 shadow-2xs">
                         • &quot;Helped build frontend web pages in React for a student club portal and connected backend APIs.&quot;
@@ -445,7 +444,7 @@ export default function HomePage() {
                     <div className="rounded-2xl rounded-tl-sm border border-stone-200 bg-white p-4 text-xs shadow-2xs">
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="font-semibold text-emerald-800 font-mono">ResiAgent Interviewer Node</span>
-                        <span className="text-[10px] text-zinc-400 font-mono">Targeting Gap #REQ-02</span>
+
                       </div>
                       <p className="text-zinc-800 leading-relaxed font-sans text-xs">
                         &quot;You mentioned helping build frontend features for the student club portal in React. The target internship requires hands-on experience with TypeScript and optimizing real API data workflows. 
@@ -501,7 +500,7 @@ export default function HomePage() {
                   <div className="lg:col-span-6 flex flex-col justify-between rounded-xl border border-stone-200 bg-stone-50/70 p-5">
                     <div>
                       <div className="flex items-center justify-between text-xs text-zinc-500 mb-2 font-mono">
-                        <span>ORIGINAL BULLET (#L18)</span>
+                        <span>ORIGINAL BULLET</span>
                         <span className="text-zinc-500">Unmodified</span>
                       </div>
                       <div className="p-4 rounded-lg bg-white border border-stone-200 font-mono text-xs text-zinc-600 leading-relaxed shadow-2xs">
@@ -527,7 +526,7 @@ export default function HomePage() {
 
                     <div>
                       <div className="flex items-center justify-between text-xs text-emerald-800 mb-2 font-mono">
-                        <span>SURGICAL PROPOSAL (#L18)</span>
+                        <span>PROPOSAL</span>
                         <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-800 font-sans font-medium border border-emerald-200">
                           100% Verifiable Context
                         </span>

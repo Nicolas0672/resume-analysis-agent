@@ -76,6 +76,7 @@ async def get_current_user(
                 signing_key.key,
                 algorithms=["ES256", "RS256"],
                 audience="authenticated",
+                leeway=30,  # 30s clock drift tolerance (RFC 7519) to prevent iat immature signature errors
             )
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -103,6 +104,7 @@ async def get_current_user(
                 secret,
                 algorithms=["HS256"],
                 audience="authenticated",
+                leeway=30,  # 30s clock drift tolerance
             )
         except jwt.ExpiredSignatureError:
             raise HTTPException(

@@ -35,6 +35,7 @@ class ResumeReference(BaseModel):
         )
 
 class InterviewDetails(BaseModel):
+    # Original identifier. Globally unique 
     topic_id: str = Field(description="Unique identifier for topic")
 
     priority: Literal["Low", "Medium", "High"]
@@ -147,6 +148,7 @@ class InvestigateOutput(BaseModel):
     user_message: str = Field(description="Message to the user asking for more details/clarification or letting them know they've provided enough context")
     evidence: Evidence | None
 
+# Not created from LLM. Manually created from evidence extracted
 class EvidenceWithDetails(BaseModel):
     evidence: Evidence | None = Field(description="Evidence found in the candidate's resume or profile data that supports their experience and qualifications for the job requirements. If no evidence is found, this field will be None")
     job_requirement: str
@@ -154,8 +156,12 @@ class EvidenceWithDetails(BaseModel):
 
 class EvidenceMapping(BaseModel):
     evidence_with_details: EvidenceWithDetails 
-    resume_reference: ResumeReference
-    mapping_status: Literal["MATCHED", "UNMATCHED"] = Field(description="If bullet points are found that match evidence, return MATCH else return UNMATCHED")
+    resume_reference: Optional[ResumeReference] = None, Field(
+        description="Reference to the specific resume entry that supports the evidence. If no matching resume entry is found, this field will be None."
+    )
+    mapping_status: Literal["MATCHED", "UNMATCHED"] = Field(
+        description="MATCHED if there is a reference to the specific resume entry that supports the evidence.; otherwise UNMATCHED."
+    )
     reasoning: Optional[str] = None
 
 class EvidenceMappingResult(BaseModel):
@@ -170,13 +176,14 @@ class TailorDecisionMatched(BaseModel):
 
 class TailorMatched(BaseModel):
     decisions: list[TailorDecisionMatched]
-    resume_reference: ResumeReference = Field(
+
+    resume_reference: ResumeReference = Field(description="Reference to the specific resume entry)")
+    topic_id: str = Field(
         description=(
-            "Copy the resume_reference from the input exactly. "
-            "This is an immutable identifier. Never modify or generate it."
+            "Copy the topic_id from the corresponding input exactly. "
+            "Never modify, generate, or invent a topic_id."
         )
     )
-    topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
 
 class TailorDecisionUnmatched(BaseModel):
     action: Literal["ADD"]
@@ -194,7 +201,12 @@ class TailorUnmatched(BaseModel):
     job_title: Optional[str] = Field("Job title at company if experienced learned from work. Otherwise return None")
     skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
     project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
-    topic_id: str = Field(description="Copy the topic_id from the input exactly. Do not modify or generate new one")
+    topic_id: str = Field(
+        description=(
+            "Copy the topic_id from the corresponding input exactly. "
+            "Never modify, generate, or invent a topic_id."
+        )
+    )
     leadership_position: Optional[str] 
     leadership_title: Optional[str]
     
@@ -222,12 +234,16 @@ class BulletFeedback(BaseModel):
 class Feedback(BaseModel):
     bullet_feedbacks: list[BulletFeedback]
 
-    topic_id: str = Field(
-        description="The topic ID associated with the evidence used to evaluate this bullet."
-    )
+    topic_id: SkipJsonSchema[str] = None
+
 
 class RegeneratedBullets(BaseModel):
-    topic_id: str
+    topic_id: str = Field(
+        description=(
+            "Copy the topic_id from the corresponding input exactly. "
+            "Never modify, generate, or invent a topic_id."
+        )
+    )
     new_bullet_points: list[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
     reasoning: str
 

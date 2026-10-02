@@ -2,6 +2,7 @@ from backend.agent.model import InterviewPlan
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 async def interview_agent(state: AgentState):
@@ -79,6 +80,9 @@ Preserve distinct technical investigations when they are materially different. M
 Do not generate interview questions. Define investigation targets for a downstream focused-interview agent.
 
 Optimize for a small number of complementary, high-signal investigations. It is acceptable to leave a requirement unresolved when there is no worthwhile investigation path.
+
+NOTE: If gap requires a degree and candidate clearly does not have one or not mentioned, that should be a standalone investigation probe
+
 """),
 ("human",
 """
@@ -99,7 +103,10 @@ Candidate leadership resume experience:
 """)
     ])
 
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_structured = model.with_structured_output(InterviewPlan)
     response = await llm_structured.ainvoke(interview_planner_prompt.format_messages(
         job_details=selected, candidate_analysis=candidate_analysis, resume_work_experience=resume_work_experience, resume_leadership=resume_leadership, resume_project=resume_project)

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from backend.agent.graph import graph
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from dotenv import load_dotenv
 
@@ -17,14 +18,16 @@ from backend.repository.resume_repository import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize Supabase tables
     init_db()
 
-    async with AsyncSqliteSaver.from_conn_string(
-        "backend/data/app.db"
-    ) as memory:
-        # Compile your graph using this checkpointer
-        app.state.graph_with_memory = graph.compile(checkpointer=memory)
+    DB_URI = os.environ["DATABASE_URL"]
+
+    async with AsyncPostgresSaver.from_conn_string(DB_URI) as memory:
+        await memory.setup()
+
+        app.state.graph_with_memory = graph.compile(
+            checkpointer=memory
+        )
 
         yield
 

@@ -2,13 +2,14 @@ from backend.agent.model import EvidenceMappingResult, EvidenceWithDetails, Feed
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 async def evidence_mapper(state: AgentState):
 
     evidence_list = state["evidence_with_details"]
-    resume_experience = state["resume_data"].work_experience
-    resume_projects = state["resume_data"].projects
+    resume_experience = state["resume_data"].work_experience if state["resume_data"].work_experience else "No work experience available"
+    resume_projects = state["resume_data"].projects if state["resume_data"].projects else "No available project experience"
     resume_leadership = state["resume_data"].leadership if state["resume_data"].leadership else "No available leadership experience"
 
     prompt = ChatPromptTemplate.from_messages([
@@ -58,7 +59,10 @@ async def evidence_mapper(state: AgentState):
         )
     ])
 
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_structured = model.with_structured_output(EvidenceMappingResult)
     response = await llm_structured.ainvoke(prompt.format_messages(
         resume_experience=resume_experience, resume_projects=resume_projects, evidence_list=evidence_list,
@@ -75,33 +79,36 @@ async def tailor_resume_bullet_points(state: AgentState):
     evidence_mapping = state.get("evidence_mapping")
 
     matched = []
+    matched_topic_id = []
     unmatched = []
+    unmatched_topic_id = []
 
     for current in evidence_mapping.evidence_mappings:
-        entry_id = current.resume_reference.entry_id
-        type = current.resume_reference.type
 
-        entries = getattr(state["resume_data"], type, [])
-        entry = next(
-            (e for e in entries if e.entry_id == entry_id),
-            None
-        )
 
         if current.mapping_status == "MATCHED":
+            entry_id = current.resume_reference.entry_id
+            type = current.resume_reference.type
+
+            entries = getattr(state["resume_data"], type, [])
+            entry = next(
+                (e for e in entries if e.entry_id == entry_id),
+                None
+            )
             matched.append({
                 "evidence_with_details": current.evidence_with_details,
                 "resume_entry": entry,
                 "resume_reference": ResumeReference(type=type, entry_id=entry_id),
                 "topic_id": current.evidence_with_details.topic_id
             })
+            matched_topic_id.append(current.evidence_with_details.topic_id)
 
         if current.mapping_status == "UNMATCHED":
             unmatched.append({
                 "evidence_with_details": current.evidence_with_details,
-                "resume_entry": entry,
-                "resume_reference": ResumeReference(type=type, entry_id=entry_id),
                 "topic_id": current.evidence_with_details.topic_id
-            })           
+            })    
+            unmatched_topic_id.append(current.evidence_with_details.topic_id)
 
 
     matched_prompt = ChatPromptTemplate.from_messages([
@@ -115,6 +122,12 @@ async def tailor_resume_bullet_points(state: AgentState):
     You are allowed to change or add multiple bullet points from the resume entry.
 
     For each mapped experience, decide whether to KEEP, MODIFY, or ADD.
+
+    Each input contains a topic_id and resume_reference.
+
+    They are an immutable identifier.
+    You MUST copy it exactly into your output.
+    Do not alter it.
 
     Rules:
     - KEEP if the existing bullets already represent the experience well. Do not
@@ -131,7 +144,7 @@ async def tailor_resume_bullet_points(state: AgentState):
     - Job keywords should improve alignment only when they accurately describe the
     candidate's experience.
     - Prefer a strong existing bullet over an unnecessary rewrite.
-    - When modifying or adding new bullet point, always prioritize using the XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
+    - When modifying or adding new bullet point, always prioritize using the XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z and ensure it is ATS optimized and aligned with job requirement. Do not invent metrics or details if not present.
     - For every matched candidate, return the resume_reference exactly as provided
     in the input. It is an identifier, not a value to generate.
     - In the 'evidence' list for each decision, include only concise, concrete factual items (e.g., specific technologies, metrics, performance gains, tools, or scope). Do NOT include raw candidate_statements or candidate quotes; candidate_statements is strictly for internal agent reasoning.
@@ -159,6 +172,12 @@ async def tailor_resume_bullet_points(state: AgentState):
     The provided evidence describes a legitimate candidate experience that is not
     currently represented on the resume. Your job is to create a new resume
     experience or project entry from that evidence.
+    Each input contains a topic_id.
+
+    The topic_id is an immutable identifier.
+    You MUST copy it exactly into your output.
+    Do not alter it.
+    Do not create new IDs.
 
     You are allowed to add multiple bullet points backed by evidence from candidate to align with
     job requirement
@@ -175,7 +194,7 @@ async def tailor_resume_bullet_points(state: AgentState):
     - Use job requirements to determine what is most relevant, but never force
     keywords that are not supported by the evidence.
     - Keep the bullets concise, specific, and achievement-oriented.
-    - Prioritize using the XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact.
+    - Prioritize using the XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact and ensure it is ATS optimized and aligned with job requirement. Do not invent metrics or details if not present.
     - In the 'evidence' list for each decision, include only concise, concrete factual items (e.g., technologies, metrics, team scale). Do NOT include raw candidate_statements or quotes.
     """
         ),
@@ -188,7 +207,10 @@ async def tailor_resume_bullet_points(state: AgentState):
     """
         )
     ])
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_matched_structured = model.with_structured_output(TailorMatchList)
     llm_unmatched_structured = model.with_structured_output(TailorUnmatchedList)
 
@@ -201,6 +223,12 @@ async def tailor_resume_bullet_points(state: AgentState):
                 matched=matched
             )
         )
+        if matched_result:
+            for matched_item in matched_result.tailor_matched:
+                if matched_item.topic_id not in matched_topic_id:
+                    raise ValueError(
+                        f"Invalid topic_id returned by LLM: {matched_item.topic_id}"
+                    )
 
     if unmatched:
         unmatched_result = await llm_unmatched_structured.ainvoke(
@@ -208,6 +236,12 @@ async def tailor_resume_bullet_points(state: AgentState):
                 unmatched=unmatched
             )
         )
+        if unmatched_result:
+            for unmatched_item in unmatched_result.tailor_unmatched:
+                if unmatched_item.topic_id not in unmatched_topic_id:
+                    raise ValueError(
+                        f"Invalid topic_id returned by LLM: {unmatched_item.topic_id}"
+                    )
 
     tailor_analysis = TailorAnalysis(
         tailor_matched_list=matched_result.tailor_matched if matched_result else [],
@@ -219,7 +253,10 @@ async def tailor_resume_bullet_points(state: AgentState):
 
 async def critique_tailored_bullet_points(state: AgentState):
 
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_structured = model.with_structured_output(Feedbacks)
     feedbacks = []
 
@@ -267,16 +304,15 @@ The question is simply:
         all_bullets = []
 
         for decision in tailor_result.decisions:
-            bullet = {
-                "new_bullet_point": decision.new_bullet,
-            }
+            if decision.action in ["ADD", "MODIFY"]:
+                bullet = {
+                    "new_bullet_point": decision.new_bullet,
+                }
 
-            if decision.old_bullet is not None:
-                bullet["old_bullet_point"] = decision.old_bullet
-
-            all_bullets.append(bullet)
+                all_bullets.append(bullet)
 
         evidence = evidence_by_topic_id[tailor_result.topic_id]
+        
 
         all_bullets_with_evidence.append({
             "all_bullets": all_bullets,
@@ -285,11 +321,12 @@ The question is simply:
         })
 
         response = await llm_structured.ainvoke(prompt.format_messages(input=all_bullets_with_evidence))
+        response.feedbacks[-1].topic_id = evidence.topic_id
         feedbacks.extend(response.feedbacks)
         
-
     return {
-        "feedbacks": feedbacks
+        "feedbacks": Feedbacks(feedbacks=feedbacks),
+        "iteration_loop": state.get("iteration_loop", 0) + 1
     }
 
 async def regenerate_bullets(state: AgentState):
@@ -298,7 +335,7 @@ async def regenerate_bullets(state: AgentState):
         for evidence in state["evidence_mapping"].evidence_mappings
     }
 
-    feedbacks = state["feedbacks"].feedbacks
+    feedbacks = state.get("feedbacks").feedbacks
 
     feedback_by_topic_id = {
         feedback.topic_id: feedback
@@ -306,12 +343,14 @@ async def regenerate_bullets(state: AgentState):
     }
 
     feedback_with_evidence = []
+    all_topic_id = []
 
     for tailor in (
         state["tailor_analysis"].tailor_matched_list
         + state["tailor_analysis"].tailor_unmatched_list
     ):
         feedback = feedback_by_topic_id.get(tailor.topic_id)
+        all_topic_id.append(tailor.topic_id)
 
         if not feedback:
             continue
@@ -319,24 +358,32 @@ async def regenerate_bullets(state: AgentState):
         evidence = evidence_by_topic_id[tailor.topic_id]
 
         for decision in tailor.decisions:
-            bullet_feedback = next(
-                (
-                    bf
-                    for bf in feedback.bullet_feedbacks
-                    if bf.sentence_id == decision.new_bullet.sentence_id or bf.sentence_id == decision.old_bullet.sentence_id
-                ),
-                None,
-            )
+            if decision.action == "ADD" or decision.action == "MODIFY":
+                bullet_feedback = next(
+                    (
+                        bf
+                        for bf in feedback.bullet_feedbacks
+                            if (
+                                bf.sentence_id == decision.new_bullet.sentence_id
+                                or (
+                                    decision.old_bullet is not None
+                                    and bf.sentence_id == decision.old_bullet.sentence_id
+                                )
+                            )                
+                        ),
+                    None,
+                )
 
-            if not bullet_feedback or bullet_feedback.valid:
-                continue
+                if not bullet_feedback or bullet_feedback.valid:
+                    continue
 
-            feedback_with_evidence.append({
-                "old_bullet": decision.old_bullet,
-                "new_bullet": decision.new_bullet,
-                "feedback": bullet_feedback,
-                "evidence": evidence,
-            })
+                feedback_with_evidence.append({
+                    "old_bullet": decision.old_bullet,
+                    "new_bullet": decision.new_bullet,
+                    "feedback": bullet_feedback,
+                    "evidence": evidence,
+                    "topic_id": tailor.topic_id
+                })
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", 
@@ -345,31 +392,52 @@ You are a resume bullet correction agent.
 
 A factuality critic found issues with the proposed bullets below.
 
+Each input contains a topic_id.
+
+The topic_id is an immutable identifier.
+You MUST copy it exactly into your output.
+Do not alter it.
+Do not create new IDs.
+
 For each proposal:
 - Review the original bullet(s) if present, candidate evidence, and critic feedback.
 - Correct only the unsupported factual claims identified by the critic.
 - Preserve all factual claims that are supported.
 - Do not introduce new claims, technologies, metrics, responsibilities, scope, or impact.
 - Do not use evidence outside the provided evidence.
-- Do not optimize wording or ATS alignment. Your only goal is factual correctness.
+- Optimize for clarity, conciseness, and XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
+- Also optimize for ATS readability and keyword alignment, but never at the expense of factual accuracy.
 - Return the corrected bullet points for each topic.
 """), ("human", "Here is the feedback with evidence {feedback_with_evidence}")
     ])
-    llm = ChatOpenAI(model="gpt-4o")
-    llm_structured = llm.with_structured_output(RegeneratedBulletsList)
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
+    llm_structured = model.with_structured_output(RegeneratedBulletsList)
 
     res = await llm_structured.ainvoke(prompt.format_messages(feedback_with_evidence=feedback_with_evidence))
+
 
     all_tailored = (
         state["tailor_analysis"].tailor_matched_list
         + state["tailor_analysis"].tailor_unmatched_list
     )
 
+
     for regenerated in res.regenerated_bullet_list:
+        if regenerated.topic_id not in all_topic_id:
+            raise ValueError(
+                f"Invalid topic_id returned by LLM: {regenerated.topic_id}"
+            )
         for proposal in all_tailored:
             if proposal.topic_id == regenerated.topic_id:
-                proposal.new_bullet = regenerated.new_bullet
-                break
+                for new in regenerated.new_bullet_points:
+                    sent_id = new.sentence_id
+                    text = new.text
+                    for decision in proposal.decisions:
+                        if decision.action in ["ADD", "MODIFY"] and decision.new_bullet.sentence_id == sent_id:
+                            decision.new_bullet.text = text
 
     return state
 
@@ -385,34 +453,32 @@ def format_evidence_for_critic(evidence: EvidenceWithDetails) -> str:
         return str(value)
 
     return f"""
-JOB REQUIREMENT:
-{safe(evidence.job_requirement)}
 
 EXPERIENCE:
-Company: {safe(e.company)}
-Job Title: {safe(e.job_title)}
-Project: {safe(e.project_name)}
-Location: {safe(e.job_location)}
-Duration: {safe(e.duration)}
+Company: {safe(e.company) if e else "Not provided"}
+Job Title: {safe(e.job_title) if e else "Not provided"}
+Project: {safe(e.project_name) if e else "Not provided"}
+Location: {safe(e.job_location) if e else "Not provided"}
+Duration: {safe(e.duration) if e else "Not provided"}
 
 DIRECT EVIDENCE:
-{safe(e.experience_found)}
+{safe(e.experience_found) if e else "Not provided"}
 
 TECHNOLOGIES:
-{safe(e.technologies)}
+{safe(e.technologies) if e else "Not provided"}
 
 OWNERSHIP:
-{safe(e.ownership)}
+{safe(e.ownership) if e else "Not provided"}
 
 SCOPE:
-{safe(e.scope)}
+{safe(e.scope) if e else "Not provided"}
 
 METRICS:
-{safe(e.metrics)}
+{safe(e.metrics) if e else "Not provided"}
 
 IMPACT:
-{safe(e.impact)}
+{safe(e.impact) if e else "Not provided"}
 
 Candidate Statement:
-{safe(e.candidate_statements)}
+{safe(e.candidate_statements) if e else "Not provided"}
 """.strip()

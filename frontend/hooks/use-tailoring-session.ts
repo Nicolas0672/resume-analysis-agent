@@ -4,23 +4,30 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   AppPhase,
   CandidateAnalysis,
+  EditEntryPayload,
   EvidenceWithDetails,
   Feedbacks,
   InterviewDetails,
   InterviewPlan,
   InterruptPayload,
   JobDetails,
+  ResumeSkills,
   ResumeStructure,
   TailorAnalysis,
 } from "@/lib/types";
 import {
+  addResumeBullet,
+  addResumeEntry,
   applyTailoring,
   customTailoring,
   deleteBullet,
   deleteEntry,
   editResumeBullet,
+  editResumeEntry,
+  editResumeSkills,
   getSessionState,
   sendChatMessage,
+  updateFullResume,
   uploadResume,
 } from "@/lib/api-client";
 
@@ -72,9 +79,13 @@ function extractStateValues(stateObj: unknown): Record<string, unknown> | null {
 export function useTailoringSession() {
   const [phase, setPhaseState] = useState<AppPhase>(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(PHASE_STORAGE_KEY) as AppPhase | null;
-      if (stored && ["setup", "verification", "interview", "tailor", "compare"].includes(stored)) {
-        return stored;
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasSession = Boolean(urlParams.get("session_id") || localStorage.getItem(SESSION_STORAGE_KEY));
+      if (hasSession) {
+        const stored = localStorage.getItem(PHASE_STORAGE_KEY) as AppPhase | null;
+        if (stored && ["setup", "verification", "interview", "tailor", "compare"].includes(stored)) {
+          return stored;
+        }
       }
     }
     return "setup";
@@ -158,6 +169,7 @@ export function useTailoringSession() {
       try {
         const res = await getSessionState(id);
         setSessionId(id);
+        updateSessionPersistence(id);
 
         const stateObj = res.state as Record<string, unknown>;
         const values = extractStateValues(stateObj || res);
@@ -445,7 +457,7 @@ export function useTailoringSession() {
   // Phase 2: Select an investigation topic
   const handleSelectTopic = useCallback(
     async (topicId: string) => {
-      if (!sessionId) return;
+      if (!sessionId || activeTopicId) return;
       setIsLoading(true);
       setError(null);
       setActiveTopicId(topicId);
@@ -472,7 +484,7 @@ export function useTailoringSession() {
         setIsLoading(false);
       }
     },
-    [sessionId]
+    [sessionId, activeTopicId]
   );
 
   // Phase 2: Submit an answer during active probe
@@ -680,6 +692,110 @@ export function useTailoringSession() {
     [sessionId]
   );
 
+  // Phase 3: Update entry fields (job title, company, degree, institution, etc.)
+  const handleEditEntry = useCallback(
+    async (entryId: number, patch: Omit<EditEntryPayload, "session_id" | "entry_id">) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await editResumeEntry({
+          session_id: sessionId,
+          entry_id: entryId,
+          ...patch,
+        });
+        if (res.status === "updated" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to edit entry");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Add new bullet to an entry
+  const handleAddBullet = useCallback(
+    async (entryId: number, text: string) => {
+      if (!sessionId || !text.trim()) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await addResumeBullet(sessionId, entryId, text.trim());
+        if (res.status === "added" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to add bullet");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Add new section entry (placed in reverse chronological order)
+  const handleAddEntry = useCallback(
+    async (sectionType: string, entryData: Record<string, any>) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await addResumeEntry(sessionId, sectionType, entryData);
+        if (res.status === "added" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to add resume entry");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Update skills section
+  const handleEditSkills = useCallback(
+    async (skills: ResumeSkills) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await editResumeSkills(sessionId, skills);
+        if (res.status === "updated" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to edit skills");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 3: Full resume update
+  const handleUpdateFullResume = useCallback(
+    async (resume: ResumeStructure) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await updateFullResume(sessionId, resume);
+        if (res.status === "updated" && res.resume_to_edit) {
+          setResumeToEdit(res.resume_to_edit);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to update full resume");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
   // Legacy proposal decisions tracker (maintained for compatibility)
   const handleDecideProposal = useCallback(
     (proposalKey: string, status: "accepted" | "rejected", customText?: string) => {
@@ -760,6 +876,11 @@ export function useTailoringSession() {
     handleEditResumeBullet,
     handleDeleteBullet,
     handleDeleteEntry,
+    handleEditEntry,
+    handleAddBullet,
+    handleAddEntry,
+    handleEditSkills,
+    handleUpdateFullResume,
     handleDecideProposal,
     handleFinishProposalReview,
     handleBackToTailoring,

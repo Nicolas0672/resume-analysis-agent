@@ -32,6 +32,8 @@ Based on [PRD.md](file:///D:/Documents/resume-agent/PRD.md), the system implemen
 | **Tailored Bullet Factuality Critique** | Implemented (`critique_tailored_bullet_points` in `tailor_agent.py`) | Tailoring Pipeline |
 | **Self-Correction & Regeneration Loop** | Implemented (`regenerate_bullets` node in `tailor_agent.py`) | Tailoring Pipeline |
 | **Interactive State Mutation & Tailoring Apply** | Implemented (Endpoints for applying, customizing proposals, and editing/deleting bullets & entries in `resume_service.py`) | Tailoring Pipeline |
+| **High-Fidelity DOCX Export** | Implemented (`python-docx` reconstruction in `services/docx_exporter.py`) | Export Engine |
+| **ATS Vector PDF Export** | Implemented (`reportlab` vector generation in `services/pdf_exporter.py`) | Export Engine |
 | **ATS Optimization Agent** | Planned Final Step (Runs after human approval to optimize for ATS) | Planned Roadmap |
 | **Direct Application Submission** | Explicitly Excluded | Non-goal |
 | **External DB & Vector Storage (RAG)**| Stubs only (`repository/`, `bucket/` empty) | Future Phase |
@@ -53,6 +55,13 @@ graph TD
     User -->|POST /tailor/edit-resume-bullets| API_EditBullet[FastAPI: /tailor/edit-resume-bullets]
     User -->|POST /tailor/delete-bullet| API_DelBullet[FastAPI: /tailor/delete-bullet]
     User -->|POST /tailor/delete-entry| API_DelEntry[FastAPI: /tailor/delete-entry]
+    User -->|POST /tailor/edit-entry| API_EditEntry[FastAPI: /tailor/edit-entry]
+    User -->|POST /tailor/add-bullet| API_AddBullet[FastAPI: /tailor/add-bullet]
+    User -->|POST /tailor/add-entry| API_AddEntry[FastAPI: /tailor/add-entry]
+    User -->|POST /tailor/edit-skills| API_EditSkills[FastAPI: /tailor/edit-skills]
+    User -->|POST /tailor/update-resume| API_UpdateResume[FastAPI: /tailor/update-resume]
+    User -->|GET /tailor/export/pdf| API_ExportPdf[FastAPI: /tailor/export/pdf]
+    User -->|GET /tailor/export/docx| API_ExportDocx[FastAPI: /tailor/export/docx]
 
     subgraph Service_Layer [Service Layer]
         API_Upload --> DocParser[Document Parser\n(services/document_parser.py)]
@@ -66,7 +75,15 @@ graph TD
         API_EditBullet --> ResumeService
         API_DelBullet --> ResumeService
         API_DelEntry --> ResumeService
-        ResumeService --> Helper[ID Generators\n(services/helper.py)]
+        API_EditEntry --> ResumeService
+        API_AddBullet --> ResumeService
+        API_AddEntry --> ResumeService
+        API_EditSkills --> ResumeService
+        API_UpdateResume --> ResumeService
+        ResumeService --> Helper[ID Generators & Chrono Sorter\n(services/helper.py)]
+
+        API_ExportPdf --> PdfExporter[PDF Exporter\n(services/pdf_exporter.py)]
+        API_ExportDocx --> DocxExporter[DOCX Exporter\n(services/docx_exporter.py)]
     end
 
     subgraph LangGraph_Runtime [LangGraph Orchestration Runtime]
@@ -767,7 +784,7 @@ Removes a specific bullet point by its `sentence_id` from the active working res
 
 ### 5.8 POST `/tailor/delete-entry`
 
-Deletes an entire experience, project, leadership, or education entry from the active working resume ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L106-L141).
+Deletes an entire experience, project, leadership, education, or certification entry from the active working resume ([`resume_to_edit`](file:///D:/Documents/resume-agent/backend/agent/state.py#L13)) via [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L110-L147).
 
 - **URL**: `/tailor/delete-entry`
 - **Method**: `POST`
@@ -780,8 +797,8 @@ Deletes an entire experience, project, leadership, or education entry from the a
 | `entry_id` | Form Field | Integer | Yes | Unique `entry_id` of the section entry to delete. |
 
 #### Application Behavior
-- Traverses list-based sections in `resume_to_edit` (`work_experience`, `projects`, `leadership`, `education`, `certifications`).
-- Locates the entry where `entry.entry_id == entry_id` and removes it from the section list.
+- Scans all list-based sections in `resume_to_edit` (`work_experience`, `projects`, `leadership`, `education`, `certifications`).
+- Uses non-mutating list filtering `[e for e in value if getattr(e, "entry_id", None) != entry_id]` to cleanly remove only the matching entry without iterator-mutation side effects or unintended deletion of identical items.
 - Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
 
 #### Response (`200 OK`)
@@ -795,6 +812,274 @@ Deletes an entire experience, project, leadership, or education entry from the a
 
 #### Error Responses
 - `400 Bad Request`: `{"detail": "Session ID is required"}`
+
+---
+
+### 5.9 POST `/tailor/edit-entry`
+
+Polymorphically updates title, company, dates, degree, institution, GPA, coursework, technologies, or other metadata for any entry across `work_experience`, `education`, `projects`, `leadership`, or `certifications` by its globally unique `entry_id`.
+
+- **URL**: `/tailor/edit-entry`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body (`application/json`)
+```json
+{
+  "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "entry_id": 2,
+  "institution": "University of California, Berkeley",
+  "degree": "B.S.",
+  "field_of_study": "Computer Science",
+  "gpa": "3.9",
+  "duration": "2020 - 2024",
+  "location": "Berkeley, CA",
+  "coursework": ["Operating Systems", "Distributed Systems"]
+}
+```
+
+#### Request Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `session_id` | String (UUID) | Yes | Active session UUID. |
+| `entry_id` | Integer | Yes | Globally unique `entry_id` of the target entry. |
+| `company` | String | Optional | Updated company name (work experience). |
+| `job_title` | String | Optional | Updated job title (work experience). |
+| `project_name` | String | Optional | Updated project name (projects). |
+| `role` | String | Optional | Updated project role (projects). |
+| `title` | String | Optional | Updated leadership organization or title. |
+| `position` | String | Optional | Updated leadership position. |
+| `institution` | String | Optional | Updated educational institution. |
+| `degree` | String | Optional | Updated degree. |
+| `field_of_study` | String | Optional | Updated major / field of study. |
+| `location` | String | Optional | Updated location. |
+| `duration` | String | Optional | Updated duration string (e.g., "2021 - Present"). |
+| `gpa` | String | Optional | Updated GPA string. |
+| `coursework` | List[String] | Optional | Updated coursework items. |
+| `technologies` | List[String] | Optional | Updated technologies list. |
+| `name` | String | Optional | Updated certification name. |
+| `date` | String | Optional | Updated certification date. |
+
+#### Application Behavior
+- Locates the entry matching `entry_id` across all list sections in `resume_to_edit`.
+- Updates only non-`None` fields provided in the request payload that exist on that entry model.
+- Leaves bullets, sentence IDs, and non-targeted attributes untouched.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "updated",
+  "resume_to_edit": { ... }
+}
+```
+*(Returns `{"status": "not_found"}` if `entry_id` does not match any entry).*
+
+---
+
+### 5.10 POST `/tailor/add-bullet`
+
+Appends a new bullet point to an existing entry (`work_experience`, `projects`, or `leadership`) and automatically sequences a new globally unique `sentence_id`.
+
+- **URL**: `/tailor/add-bullet`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body (`application/json`)
+```json
+{
+  "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "entry_id": 0,
+  "text": "Engineered distributed streaming pipeline processing 50k events/sec using Kafka."
+}
+```
+
+#### Application Behavior
+- Locates the entry matching `entry_id` in `resume_to_edit`.
+- Verifies the entry supports a `bullets` list.
+- Calls `get_next_sentence_id(resume_to_edit)` to allocate a collision-free sequential `sentence_id`.
+- Instantiates a `ResumeBullet` and appends it to `entry.bullets`.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "added",
+  "bullet": {
+    "text": "Engineered distributed streaming pipeline processing 50k events/sec using Kafka.",
+    "sentence_id": 24
+  },
+  "resume_to_edit": { ... }
+}
+```
+
+---
+
+### 5.11 POST `/tailor/edit-skills`
+
+Updates technical skill category lists in `resume_to_edit.skills`.
+
+- **URL**: `/tailor/edit-skills`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body (`application/json`)
+```json
+{
+  "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "skills": {
+    "programming_languages": ["Python", "TypeScript", "Go"],
+    "frameworks": ["FastAPI", "React", "Next.js"],
+    "databases": ["PostgreSQL", "Redis"],
+    "cloud": ["AWS", "GCP"],
+    "tools": ["Docker", "Kubernetes", "Git"]
+  }
+}
+```
+
+#### Application Behavior
+- Replaces `resume_to_edit.skills` with the provided validated `ResumeSkills` model.
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "updated",
+  "resume_to_edit": { ... }
+}
+```
+
+---
+
+### 5.12 POST `/tailor/update-resume`
+
+Performs a full document state synchronization for `resume_to_edit` when performing bulk structural reordering or complex canvas mutations.
+
+- **URL**: `/tailor/update-resume`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body (`application/json`)
+```json
+{
+  "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "resume_to_edit": { ... }
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "updated",
+  "resume_to_edit": { ... }
+}
+```
+
+---
+
+### 5.13 POST `/tailor/add-entry`
+
+Appends or inserts a new experience, project, leadership, education, or certification entry into `resume_to_edit` in **reverse chronological order** based on its parsed duration/date.
+
+- **URL**: `/tailor/add-entry`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body (`application/json`)
+```json
+{
+  "session_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "section_type": "work_experience",
+  "entry": {
+    "company": "Gamma Tech",
+    "job_title": "Lead Architect",
+    "duration": "2023 - Present",
+    "location": "Remote",
+    "technologies": ["Python", "Go", "Kubernetes"],
+    "bullets": [
+      { "text": "Spearheaded enterprise microservices platform migration." }
+    ]
+  }
+}
+```
+
+#### Application Behavior
+- Dynamically allocates a new globally unique `entry_id` via `get_next_entry_id(resume_to_edit)`.
+- Automatically allocates sequential `sentence_id`s for any provided bullets.
+- Instantiates the section's target model (`ResumeExperience`, `ResumeProject`, `ResumeLeadership`, `ResumeEducation`, `ResumeCertification`).
+- Parses the entry's duration/date via `get_entry_date_sort_key` and inserts it into the section in **reverse chronological order** (most recent dates first, e.g. "Present" / latest year at top; undated entries at the bottom).
+- Persists changes via `graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})`.
+
+#### Response (`200 OK`)
+```json
+{
+  "status": "added",
+  "entry": { ... },
+  "resume_to_edit": { ... }
+}
+```
+
+---
+
+### 5.14 GET `/tailor/export/pdf`
+
+Exports the candidate's active tailored resume (`resume_to_edit`) directly as a high-fidelity, ATS-compliant vector PDF.
+
+- **URL**: `/tailor/export/pdf`
+- **Method**: `GET`
+- **Query Parameters**:
+  - `session_id` (string, required): The target tailoring session UUID.
+- **Headers**:
+  - `Authorization: Bearer <token>`: Required JWT authentication.
+- **Response**: `200 OK`
+  - `Content-Type`: `application/pdf`
+  - `Content-Disposition`: `attachment; filename="{Candidate_Name}_Tailored_Resume.pdf"`
+  - Body: Binary vector PDF byte stream generated via ReportLab.
+
+---
+
+### 5.15 GET `/tailor/export/docx`
+
+Exports the candidate's active tailored resume (`resume_to_edit`) directly as a structured Microsoft Word `.docx` document preserving standard ATS formatting and styling.
+
+- **URL**: `/tailor/export/docx`
+- **Method**: `GET`
+- **Query Parameters**:
+  - `session_id` (string, required): The target tailoring session UUID.
+- **Headers**:
+  - `Authorization: Bearer <token>`: Required JWT authentication.
+- **Response**: `200 OK`
+  - `Content-Type`: `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+  - `Content-Disposition`: `attachment; filename="{Candidate_Name}_Tailored_Resume.docx"`
+  - Body: Binary OpenXML `.docx` byte stream generated via `python-docx`.
+
+---
+
+### 5.16 Export Engine & Layout Preservation Architecture
+
+Both exporters are designed to strictly replicate the exact structural presentation and visual hierarchy of the working resume (`resume_to_edit`) without altering styling or ordering:
+
+1. **Page Geometry & Margins**:
+   - Both formats utilize standard US Letter page setup (`8.5" x 11.0"`).
+   - Strict 0.5-inch (`36pt`) margins on all four sides (top, bottom, left, right), matching standard ATS engineering resumes.
+2. **Typography & Hierarchy**:
+   - **Candidate Name**: Bold, 18pt, Centered, uppercase.
+   - **Contact Information**: Regular, 9.5pt, Centered, pipe-delimited (` | `).
+   - **Section Headings**: Bold, 10.5pt, uppercase with an underline / border rule beneath each heading (`EDUCATION`, `WORK EXPERIENCE`, `PROJECTS`, `LEADERSHIP & EXTRACURRICULARS`, `TECHNICAL SKILLS`).
+3. **Tabular Parity (Two-Column Alignment)**:
+   - For education, work experience, projects, and leadership:
+     - Left column: Job Title / Degree / Organization (Bold, left-aligned).
+     - Right column: Duration / Dates / Location (Regular/muted, right-aligned).
+     - Second row (left): Company / Major / Technologies (Italic/regular).
+   - In DOCX, this is achieved via borderless 2-column tables with explicit column widths (5.4 in / 2.1 in) and zero cell padding to guarantee consistency across Microsoft Word, Google Docs, and LibreOffice.
+   - In PDF, this is generated via ReportLab `Table` flowables with exact point widths (385pt / 155pt).
+4. **Native Bullet Points**:
+   - DOCX: Native Word `List Bullet` paragraph styling with compact spacing (`space_before=0`, `space_after=1.5pt`, `left_indent=0.22"`).
+   - PDF: ReportLab `Paragraph` flowables with hanging indent (`leftIndent=14`, `firstLineIndent=-10`) and bullet entity markers.
+5. **Technical Skills Categorization**:
+   - Dynamic extraction of non-empty categories (`Languages`, `Frameworks`, `Libraries`, `Databases`, `Cloud / DevOps`, `Developer Tools`, `Other`) rendered with bold category prefix and comma-separated items.
+6. **Zero Blank Page Printing (Isolated Print Frame)**:
+   - To resolve browser print engine height collapse and default header/footer URL printing, `final-comparison.tsx` clones the resume node into an isolated, temporary hidden iframe with `@page { size: letter; margin: 0.5in; }` before triggering `window.print()`.
 
 ---
 
@@ -829,6 +1114,8 @@ class ResumeLeadership(BaseModel):
     title: str
     position: Optional[str]
     bullets: list[ResumeBullet] = Field(default_factory=list)
+    location: Optional[str] = None
+    duration: Optional[str] = None
 
 class ResumeEducation(BaseModel):
     entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
@@ -846,6 +1133,9 @@ class ResumeProject(BaseModel):
     project_name: Optional[str] = None
     technologies: Optional[list[str]] = None
     bullets: list[ResumeBullet] = Field(default_factory=list)
+    role: Optional[str] = None
+    location: Optional[str] = None
+    duration: Optional[str] = None
 
 class ResumeCertification(BaseModel):
     entry_id: Annotated[int | None, SkipJsonSchema[None]] = None
@@ -872,6 +1162,44 @@ class ResumeStructure(BaseModel):
     projects: list[ResumeProject] = Field(default_factory=list)
     certifications: list[ResumeCertification] = Field(default_factory=list)
     skills: Optional[ResumeSkills] = None
+
+class EditEntryRequest(BaseModel):
+    session_id: str
+    entry_id: int
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+    project_name: Optional[str] = None
+    role: Optional[str] = None
+    title: Optional[str] = None
+    position: Optional[str] = None
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    field_of_study: Optional[str] = None
+    location: Optional[str] = None
+    duration: Optional[str] = None
+    gpa: Optional[str] = None
+    coursework: Optional[list[str]] = None
+    technologies: Optional[list[str]] = None
+    name: Optional[str] = None
+    date: Optional[str] = None
+
+class AddBulletRequest(BaseModel):
+    session_id: str
+    entry_id: int
+    text: str
+
+class EditSkillsRequest(BaseModel):
+    session_id: str
+    skills: ResumeSkills
+
+class UpdateResumeRequest(BaseModel):
+    session_id: str
+    resume_to_edit: ResumeStructure
+
+class AddEntryRequest(BaseModel):
+    session_id: str
+    section_type: Literal["work_experience", "education", "projects", "leadership", "certifications"]
+    entry: dict[str, Any]
 ```
 
 ### 6.2 Agent Domain Models ([`backend/agent/model.py`](file:///D:/Documents/resume-agent/backend/agent/model.py))
@@ -1030,7 +1358,60 @@ class RegeneratedBulletsList(BaseModel):
 3. **Working Directory Dependency for SQLite DB (`main.py:L29`)**:
    - The connection string is hardcoded as relative path `"backend/data/app.db"`. The server must be executed from the workspace root (`resume-agent`).
 4. **`delete_entry` Section Scoping**:
-   - [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L106-L141) scans all list-based sections for matching `entry_id`. Because `assign_entry_ids` assigns sequential IDs starting from 0, entry IDs must remain distinct across sections to prevent collisions.
+   - [`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L110-L147) scans all list-based sections for matching `entry_id`. Because `assign_entry_ids` assigns sequential IDs starting from 0, entry IDs remain distinct across sections to prevent collisions.
+
+### 7.3 Backend Complexity Findings & Architectural Analysis
+
+During the evolution from an initial proposal-centric, bullet-only modification model to full interactive resume editing, several backend architectural nuances and complexity hotspots were investigated and resolved:
+
+#### 1. Polymorphic Entry Mutation vs. Endpoint Proliferation
+- **The Problem**: A resume comprises multiple distinct section types (`work_experience`, `education`, `projects`, `leadership`, `certifications`), each with different metadata structures (e.g., `institution` + `degree` vs. `company` + `job_title` vs. `project_name` + `role`). Creating separate endpoints for every section (`/edit-education`, `/edit-experience`, `/edit-project`, etc.) would unnecessarily proliferate route handlers, duplicate session lookup boilerplate, and increase frontend-backend coupling.
+- **The Discovery**: The parser pipeline allocates a globally unique, sequential integer `entry_id` across *all* list sections via [`assign_entry_ids`](file:///D:/Documents/resume-agent/backend/services/helper.py#L46-L56). An entry in `education` will never share an `entry_id` with an entry in `work_experience`.
+- **The Solution**: A single polymorphic endpoint ([`POST /tailor/edit-entry`](#59-post-tailoredit-entry)) accepts an [`EditEntryRequest`](#61-job-posting--resume-models) containing `entry_id` and optional sparse fields. The backend service ([`update_resume_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L324-L352)) dynamically traverses all list sections, matches the entry by `entry_id`, and applies updates using `model_dump(exclude_unset=True)`. Only attributes explicitly provided in the payload that match the entry model's fields are updated, leaving bullets and other metadata intact.
+
+#### 2. Iterator In-Place Mutation and Pydantic Structural Equality (`delete_entry` & `delete_bullet`)
+- **The Problem**: In earlier iterations, entry and bullet deletion logic utilized the pattern:
+  ```python
+  for entry in section_list:
+      if getattr(entry, "entry_id", None) == entry_id:
+          section_list.remove(entry)
+          break
+  ```
+  This pattern introduces two subtle but severe defects:
+  1. *Iterator index skipping*: Modifying a list in-place while iterating over it causes the iterator cursor to skip subsequent items.
+  2. *Structural equality hazards in Pydantic v2*: In Pydantic v2, `BaseModel.__eq__` evaluates equality based on all model field values rather than object identity (`id()`). If two entries share identical or empty values (e.g., draft entries with null company names or empty bullet lists), `section_list.remove(entry)` finds and removes the *first* matching object in the list, potentially deleting the wrong sibling item rather than the intended target.
+- **The Solution**: All deletion helpers ([`delete_entry`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L110-L147) and [`delete_bullet`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L64-L103)) were refactored to use non-mutating list comprehensions with explicit ID filtering:
+  ```python
+  setattr(resume_to_edit, section_name, [
+      item for item in section_items
+      if getattr(item, "entry_id", None) != entry_id
+  ])
+  ```
+  This guarantees idempotent, identity-agnostic removal without iterator side effects.
+
+#### 3. Request Payload Protocol: JSON Bodies vs. Form Data
+- **The Problem**: Legacy endpoints (`/tailor/edit-resume-bullets`, `/tailor/delete-bullet`, `/tailor/delete-entry`) utilized FastAPI `Form(...)` parameters (`application/x-www-form-urlencoded` / `multipart/form-data`). While adequate for primitive scalar fields (`session_id: str`, `sentence_id: int`), form encoding breaks down when transmitting nested arrays (e.g., `technologies: list[str]`, `coursework: list[str]`) or complex nested models (e.g., `ResumeSkills`). Parsing lists from forms requires either brittle comma-splitting or manual JSON parsing of form strings.
+- **The Solution**: All newly introduced endpoints ([`/tailor/edit-entry`](#59-post-tailoredit-entry), [`/tailor/add-bullet`](#510-post-tailoradd-bullet), [`/tailor/edit-skills`](#511-post-tailoredit-skills), [`/tailor/update-resume`](#512-post-tailorupdate-resume)) accept typed JSON payloads mapped to Pydantic request models ([`EditEntryRequest`](#61-job-posting--resume-models), [`AddBulletRequest`](#61-job-posting--resume-models), [`EditSkillsRequest`](#61-job-posting--resume-models), [`UpdateResumeRequest`](#61-job-posting--resume-models)). This enforces compile-time schema validation, seamless TypeScript client generation, and full support for nested structures, while preserving backward compatibility for existing form-based endpoints.
+
+#### 4. Deterministic Sequential ID Allocation for Dynamic Additions
+- **The Problem**: When a candidate manually appends a bullet point directly on the resume canvas, the new bullet must be immediately actionable (editable or deletable) in subsequent requests. This requires allocating a collision-free `sentence_id`.
+- **The Solution**: [`add_resume_bullet`](file:///D:/Documents/resume-agent/backend/services/resume_service.py#L354-L382) invokes [`get_next_sentence_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L4-L30) to compute `max(existing_sentence_ids) + 1` across all resume sections (bullets, education sentence IDs, certification sentence IDs, and skills sentence IDs) before instantiating the new [`ResumeBullet`](#61-job-posting--resume-models). Furthermore, [`get_next_entry_id`](file:///D:/Documents/resume-agent/backend/services/helper.py#L32-L44) was hardened to handle uninitialized `entry_id: None` values safely.
+
+#### 5. Checkpointer State Synchronization Without Graph Execution
+- **The Problem**: A common pitfall in stateful LLM orchestrators (such as LangGraph) is requiring graph re-execution or node re-routing whenever the client modifies state data. Invoking the LLM graph on every user keystroke or canvas edit would introduce unacceptable latency (>2-5 seconds), high token costs, and risks of undesired state machine transitions.
+- **The Solution**: The backend leverages LangGraph's out-of-band state mutation API:
+  ```python
+  await graph_with_memory.aupdate_state(config, {"resume_to_edit": resume_to_edit})
+  ```
+  Mutations execute entirely in the service layer in under 10ms, persisting the updated `resume_to_edit` directly to the SQLite checkpointer. The state graph remains paused at its current interrupt or completion point, and subsequent operations (such as the planned ATS optimization node or resume export) seamlessly consume the updated state.
+
+#### 6. Deterministic Reverse Chronological Ordering for Dynamic Experience Additions
+- **The Problem**: In initial drafts, applying an unmatched proposal (`tailor_unmatched`) or adding a new entry simply appended the new item to the end of the section list (`section.append(...)`). On professional resumes, experiences, projects, and leadership roles must strictly adhere to reverse chronological order (newest first). Appending to the bottom caused newer experiences (e.g. a 2024 role discovered during candidate investigation) to appear below older roles (e.g. 2019-2021).
+- **The Solution**: A centralized date parsing and comparison engine was implemented in [`backend/services/helper.py`](file:///D:/Documents/resume-agent/backend/services/helper.py):
+  1. `get_duration_sort_key(duration_str)` parses multi-format date strings (including full and abbreviated month names, 4-digit years, numeric slash/dash formats, and keywords like `Present` / `Current`) into a 4-tuple: `(end_year, end_month, start_year, start_month)`. `Present` maps to `(9999, 12)`, ensuring current roles rank at the very top.
+  2. `insert_entry_in_reverse_chronological_order(section_list, new_entry)` calculates the new entry's sort key and inserts it at the exact reverse chronological index within the section (before any older entry). Undated entries are stably preserved at the end.
+  3. Whenever unmatched tailoring is applied ([`apply_tailored_bullets`](file:///D:/Documents/resume-agent/backend/services/resume_service.py)) or a new entry is created via [`POST /tailor/add-entry`](#513-post-tailoradd-entry), the entry lands in reverse chronological order depending on which section it targets (`work_experience`, `projects`, `leadership`, `education`, `certifications`).
+  4. If a user edits an existing entry's duration via [`POST /tailor/edit-entry`](#59-post-tailoredit-entry), `sort_section_in_reverse_chronological_order` automatically re-aligns the section to maintain continuous reverse chronological integrity.
 
 ---
 
@@ -1050,9 +1431,16 @@ class RegeneratedBulletsList(BaseModel):
      - `tailor_unmatched_list`: Proposed new experiences or projects with company, title, duration, skills, and new XYZ bullets.
      - `feedbacks`: Verification confirmation confirming zero hallucinated claims.
 4. **Interactive Tailoring & Working Resume Editing**:
-   - The frontend UI can allow the candidate to tweak proposed bullet text prior to merging via `POST /tailor/custom-tailoring`.
+   - The frontend UI allows the candidate to tweak proposed bullet text prior to merging via `POST /tailor/custom-tailoring`.
    - The candidate applies a tailored topic via `POST /tailor/apply-tailoring`, receiving the updated `resume_to_edit` in response.
+   - Newly applied or added experiences land strictly in **reverse chronological order** within their target section based on duration/date.
+   - Canvas presentation maintains clean, executive typographic styling without decorative logos or icons near section headers.
    - The candidate can edit existing bullets directly in the working resume via `POST /tailor/edit-resume-bullets`.
+   - The candidate can edit entry headers and metadata across any section (company, job title, degree, institution, GPA, dates, coursework, technologies) via `POST /tailor/edit-entry`.
+   - The candidate can append new bullet points to any entry with automatic sequential sentence ID allocation via `POST /tailor/add-bullet`.
+   - The candidate can add new entries directly via `POST /tailor/add-entry`.
+   - The candidate can update technical skills categories via `POST /tailor/edit-skills`.
    - The candidate can delete individual bullets or entire entries via `POST /tailor/delete-bullet` and `POST /tailor/delete-entry`.
+   - The candidate can perform full document state synchronization (e.g., after reordering sections) via `POST /tailor/update-resume`.
 5. **CORS & Service Integration**:
    - Backend runs on `http://localhost:8000` with CORS configured for `http://localhost:3000`.

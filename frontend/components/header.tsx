@@ -46,9 +46,9 @@ export function Header({ phase, sessionId, jobDetails, onResetSession }: HeaderP
   useEffect(() => {
     try {
       const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
-        if (data?.user?.email) {
-          setUserEmail(data.user.email);
+      supabase.auth.getUser().then((res: any) => {
+        if (res?.data?.user?.email) {
+          setUserEmail(res.data.user.email);
         }
       });
     } catch {

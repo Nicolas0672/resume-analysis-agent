@@ -9,7 +9,7 @@ from backend.agent.nodes.human_decision import human_after_analysis, human_after
 from backend.agent.nodes.interview import investigate_candidate, reset_investigation
 from backend.agent.nodes.interview_planner import interview_agent
 from backend.agent.nodes.tailor_agent import critique_tailored_bullet_points, evidence_mapper, regenerate_bullets, tailor_resume_bullet_points
-from backend.agent.router import route_after_tailoring, route_investigation_or_tailoring, router_after_analysis, router_to_generate, router_to_stop_investigation
+from backend.agent.router import route_investigation_or_tailoring, router_after_analysis, router_to_generate, router_to_stop_investigation
 from backend.agent.state import AgentState
 from backend.agent.nodes.analyzation import analyze_candidate
 import sqlite3
@@ -29,60 +29,6 @@ class NodesNames(str, Enum):
     EVIDENCE_MAPPER = "evidence_mapper"
     REGENERATE = "regenerate"
     RESET_INVESTIGATION = "reset_investigation"
-# use for later
-candidate = {
-    "candidate_id": "CAND-10482",
-    "name": "Alex Morgan",
-    "location": "Seattle, WA",
-    "education": {
-        "degree": "B.S. Computer Science",
-        "school": "University of Washington",
-        "graduation_year": 2022
-    },
-    "skills": [
-        "Python",
-        "MongoDB",
-        "AWS",
-        "REST APIs",
-        "Git",
-        "SQL"
-    ],
-    "experience": [
-        {
-            "experience_id": "EXP-001",
-            "company": "McDonald's",
-            "title": "Crew Member",
-            "start": "2018-06",
-            "end": "2019-08",
-            "description": "Served customers, handled cash, prepared orders, and worked in a fast-paced team environment."
-        },
-        {
-            "experience_id": "EXP-002",
-            "company": "Amazon",
-            "title": "Operations Associate",
-            "start": "2019-09",
-            "end": "2020-12",
-            "description": "Managed inventory workflows and helped improve warehouse processes using internal tools."
-        },
-        {
-            "experience_id": "EXP-003",
-            "company": "TechStart Labs",
-            "title": "Software Engineering Intern",
-            "start": "2021-06",
-            "end": "2021-12",
-            "description": "Built Python services and REST APIs while working with MongoDB and AWS."
-        },
-        {
-            "experience_id": "EXP-004",
-            "company": "CloudWorks",
-            "title": "Software Engineer",
-            "start": "2022-01",
-            "end": "2025-07",
-            "description": "Developed Python backend services, designed MongoDB data models, and maintained cloud-based APIs."
-        }
-    ],
-    "summary": "Software engineer with a non-traditional background spanning retail, operations, and backend development. Experienced with Python, MongoDB, AWS, and API development."
-}
 
 graph = StateGraph(AgentState)
 graph.add_node(NodesNames.ANALYZE_CANDIDATE, analyze_candidate)
@@ -129,10 +75,6 @@ graph.add_conditional_edges(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, router_t
 graph.add_edge(NodesNames.REGENERATE, NodesNames.CRITIQUE_TAILORED_BULLET_POINTS)
 
 
-# graph.add_conditional_edges(NodesNames.CRITIQUE_TAILORED_BULLET_POINTS, route_after_tailoring, {
-#     "done": END,
-#     "tailor": NodesNames.TAILOR_RESUME_BULLET_POINTS
-# })
 
 
 

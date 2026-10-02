@@ -30,6 +30,21 @@ async def resume_tailoring_session(session_id: str, user_message: str, request: 
     }
     graph_with_memory = request.app.state.graph_with_memory
 
+    # State guard: Prevent cross-topic injection while an active question probe is pending
+    state = await graph_with_memory.aget_state(config)
+    next_nodes = state.next if state else ()
+
+    if "human_investigate_chat" in next_nodes:
+        plan = state.values.get("interview_plan") if state and state.values else None
+        if plan and hasattr(plan, "interview_plan"):
+            known_topic_ids = {t.topic_id for t in plan.interview_plan}
+            if user_message.strip() in known_topic_ids:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Active investigation probe in progress. Cannot switch to topic '{user_message}' while a question is pending.",
+                )
+
     result = await graph_with_memory.ainvoke(
         Command(resume=user_message),
         config=config,

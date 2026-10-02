@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import {
   Feedbacks,
   InterviewPlan,
+  ResumeSkills,
   ResumeStructure,
   TailorAnalysis,
 } from "@/lib/types";
@@ -32,6 +33,9 @@ interface TailoringWorkspaceProps {
   onEditResumeBullet: (sentenceId: number, newText: string) => Promise<void>;
   onDeleteBullet: (sentenceId: number) => Promise<void>;
   onDeleteEntry: (entryId: number) => Promise<void>;
+  onEditEntry?: (entryId: number, patch: Record<string, any>) => Promise<void>;
+  onAddBullet?: (entryId: number, text: string) => Promise<void>;
+  onEditSkills?: (skills: ResumeSkills) => Promise<void>;
   onFinishReview: () => void;
 }
 
@@ -48,6 +52,9 @@ export function TailoringWorkspace({
   onEditResumeBullet,
   onDeleteBullet,
   onDeleteEntry,
+  onEditEntry,
+  onAddBullet,
+  onEditSkills,
   onFinishReview,
 }: TailoringWorkspaceProps) {
   const rotatingPhrase = useRotatingPhrase(isSynthesizing);
@@ -182,6 +189,9 @@ export function TailoringWorkspace({
             onEditBullet={onEditResumeBullet}
             onDeleteBullet={onDeleteBullet}
             onDeleteEntry={onDeleteEntry}
+            onEditEntry={onEditEntry}
+            onAddBullet={onAddBullet}
+            onEditSkills={onEditSkills}
           />
         </div>
 

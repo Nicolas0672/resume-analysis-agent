@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume Co-Pilot | Evidence-First Resume Tailoring",
+  title: "ResiAgent | Evidence-First Resume Tailoring",
   description: "Interactive AI agent that validates candidate fit, probes for verifiable metrics, and builds fact-checked resumes without hallucination.",
 };
 

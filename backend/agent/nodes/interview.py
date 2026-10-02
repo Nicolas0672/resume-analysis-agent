@@ -4,6 +4,7 @@ from backend.agent.model import EvidenceWithDetails, InvestigateOutput
 from backend.agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, RemoveMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # if user has 2 experience within a message window, it should be viewed as 2 seperate objects
 
@@ -138,7 +139,10 @@ The goal is not to close every job-requirement gap. The goal is to discover the 
      """)
     ])
 
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.8-flash",
+        temperature=0
+    )
     llm_structured = model.with_structured_output(InvestigateOutput)
     response = await llm_structured.ainvoke(prompt.format_messages(
         topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,

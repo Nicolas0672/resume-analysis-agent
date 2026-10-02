@@ -7,7 +7,7 @@ import { InterviewWorkspace } from "@/components/phase-interview/interview-works
 import { TailoringWorkspace } from "@/components/phase-tailor/tailoring-workspace";
 import { FinalComparison } from "@/components/phase-compare/final-comparison";
 import { useTailoringSession } from "@/hooks/use-tailoring-session";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 // Deterministic constellation dots for creeping ambient depth (SSR-safe)
 const CONSTELLATION_DOTS = [
@@ -61,6 +61,9 @@ export default function WorkspacePage() {
     handleEditResumeBullet,
     handleDeleteBullet,
     handleDeleteEntry,
+    handleEditEntry,
+    handleAddBullet,
+    handleEditSkills,
     handleFinishProposalReview,
     handleBackToTailoring,
     handleResetSession,
@@ -131,68 +134,86 @@ export default function WorkspacePage() {
 
       {/* Adaptive Phase Workspace */}
       <main className="relative z-10 flex-1 flex flex-col justify-center print:block print:w-full print:m-0 print:p-0">
-        {phase === "setup" && (
-          <Dropzone
-            isLoading={isLoading}
-            requiresFallback={requiresJobDescriptionFallback}
-            fallbackError={fallbackErrorMessage}
-            pendingFile={pendingFile}
-            onUpload={handleUpload}
-            onSelectSession={rehydrateSession}
-          />
-        )}
+        {isLoading && sessionId && !jobDetails ? (
+          <div className="flex flex-col items-center justify-center py-28 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+            <div className="text-center space-y-1">
+              <p className="text-sm font-semibold text-zinc-900">Rehydrating Agent Session</p>
+              <p className="text-xs font-mono text-stone-500">
+                Retrieving state from checkpointer thread #{sessionId.slice(0, 8)}...
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {phase === "setup" && (
+              <Dropzone
+                isLoading={isLoading}
+                requiresFallback={requiresJobDescriptionFallback}
+                fallbackError={fallbackErrorMessage}
+                pendingFile={pendingFile}
+                onUpload={handleUpload}
+                onSelectSession={rehydrateSession}
+              />
+            )}
 
-        {phase === "verification" && (
-          <SplitVerification
-            jobDetails={jobDetails}
-            candidateAnalysis={candidateAnalysis}
-            isLoading={isLoading}
-            onSelectAction={handleSelectAction}
-          />
-        )}
+            {phase === "verification" && (
+              <SplitVerification
+                jobDetails={jobDetails}
+                candidateAnalysis={candidateAnalysis}
+                isLoading={isLoading}
+                onSelectAction={handleSelectAction}
+              />
+            )}
 
-        {phase === "interview" && (
-          <InterviewWorkspace
-            jobDetails={jobDetails}
-            candidateAnalysis={candidateAnalysis}
-            interviewPlan={interviewPlan}
-            activeInterrupt={activeInterrupt}
-            completedTopicIds={completedTopicIds}
-            evidenceWithDetails={evidenceWithDetails}
-            activeTopicId={activeTopicId}
-            investigationMessages={investigationMessages}
-            isLoading={isLoading}
-            onSelectTopic={handleSelectTopic}
-            onSubmitAnswer={handleSubmitAnswer}
-            onProceedToTailoring={handleProceedToTailoring}
-          />
-        )}
+            {phase === "interview" && (
+              <InterviewWorkspace
+                jobDetails={jobDetails}
+                candidateAnalysis={candidateAnalysis}
+                interviewPlan={interviewPlan}
+                activeInterrupt={activeInterrupt}
+                completedTopicIds={completedTopicIds}
+                evidenceWithDetails={evidenceWithDetails}
+                activeTopicId={activeTopicId}
+                investigationMessages={investigationMessages}
+                isLoading={isLoading}
+                onSelectTopic={handleSelectTopic}
+                onSubmitAnswer={handleSubmitAnswer}
+                onProceedToTailoring={handleProceedToTailoring}
+              />
+            )}
 
-        {phase === "tailor" && (
-          <TailoringWorkspace
-            resumeData={resumeData}
-            resumeToEdit={resumeToEdit}
-            tailorAnalysis={tailorAnalysis}
-            feedbacks={feedbacks}
-            appliedTopicIds={appliedTopicIds}
-            interviewPlan={interviewPlan}
-            isSynthesizing={isSynthesizing}
-            onApplyTopic={handleApplyTailoring}
-            onCustomTailoring={handleCustomTailoring}
-            onEditResumeBullet={handleEditResumeBullet}
-            onDeleteBullet={handleDeleteBullet}
-            onDeleteEntry={handleDeleteEntry}
-            onFinishReview={handleFinishProposalReview}
-          />
-        )}
+            {phase === "tailor" && (
+              <TailoringWorkspace
+                resumeData={resumeData}
+                resumeToEdit={resumeToEdit}
+                tailorAnalysis={tailorAnalysis}
+                feedbacks={feedbacks}
+                appliedTopicIds={appliedTopicIds}
+                interviewPlan={interviewPlan}
+                isSynthesizing={isSynthesizing}
+                onApplyTopic={handleApplyTailoring}
+                onCustomTailoring={handleCustomTailoring}
+                onEditResumeBullet={handleEditResumeBullet}
+                onDeleteBullet={handleDeleteBullet}
+                onDeleteEntry={handleDeleteEntry}
+                onEditEntry={handleEditEntry}
+                onAddBullet={handleAddBullet}
+                onEditSkills={handleEditSkills}
+                onFinishReview={handleFinishProposalReview}
+              />
+            )}
 
-        {phase === "compare" && (
-          <FinalComparison
-            originalResume={resumeData}
-            tailoredResume={resumeToEdit}
-            appliedTopicCount={appliedTopicIds.length}
-            onBackToTailoring={handleBackToTailoring}
-          />
+            {phase === "compare" && (
+              <FinalComparison
+                sessionId={sessionId}
+                originalResume={resumeData}
+                tailoredResume={resumeToEdit}
+                appliedTopicCount={appliedTopicIds.length}
+                onBackToTailoring={handleBackToTailoring}
+              />
+            )}
+          </>
         )}
       </main>
     </div>

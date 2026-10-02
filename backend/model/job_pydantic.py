@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -103,4 +103,47 @@ class ResumeStructure(BaseModel):
     projects: list[ResumeProject] = Field(default_factory=list)
     certifications: list[ResumeCertification] = Field(default_factory=list)
     skills: Optional[ResumeSkills] = None
+
+
+class EditEntryRequest(BaseModel):
+    session_id: str
+    entry_id: int
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+    project_name: Optional[str] = None
+    role: Optional[str] = None
+    title: Optional[str] = None
+    position: Optional[str] = None
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    field_of_study: Optional[str] = None
+    location: Optional[str] = None
+    duration: Optional[str] = None
+    gpa: Optional[str] = None
+    coursework: Optional[list[str]] = None
+    technologies: Optional[list[str]] = None
+    name: Optional[str] = None
+    date: Optional[str] = None
+
+
+class AddBulletRequest(BaseModel):
+    session_id: str
+    entry_id: int
+    text: str
+
+
+class EditSkillsRequest(BaseModel):
+    session_id: str
+    skills: ResumeSkills
+
+
+class UpdateResumeRequest(BaseModel):
+    session_id: str
+    resume_to_edit: ResumeStructure
+
+
+class AddEntryRequest(BaseModel):
+    session_id: str
+    section_type: Literal["work_experience", "education", "projects", "leadership", "certifications"]
+    entry: dict[str, Any]
 

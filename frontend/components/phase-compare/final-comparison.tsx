@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { ResumeStructure } from "@/lib/types";
 import { getActiveSkillEntries } from "@/lib/utils";
+import { exportResumeDocx, exportResumePdf } from "@/lib/api-client";
 import {
   Printer,
   FileDown,
@@ -13,9 +14,12 @@ import {
   AlertTriangle,
   AlertOctagon,
   FileText,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 interface FinalComparisonProps {
+  sessionId?: string | null;
   originalResume: ResumeStructure | null;
   tailoredResume: ResumeStructure | null;
   appliedTopicCount?: number;
@@ -23,13 +27,16 @@ interface FinalComparisonProps {
 }
 
 export function FinalComparison({
+  sessionId,
   originalResume,
   tailoredResume,
   appliedTopicCount = 0,
   onBackToTailoring,
 }: FinalComparisonProps) {
   const [highlightChanges, setHighlightChanges] = useState(true);
-  const [docxToast, setDocxToast] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [exportPageSelection, setExportPageSelection] = useState<"all" | "page1" | "page2">("all");
   const [showOverLimitModal, setShowOverLimitModal] = useState(false);
 
@@ -98,32 +105,142 @@ export function FinalComparison({
   const isMultiPage = contentUnits > 36;
   const isExceedingMax = contentUnits > 72;
 
+  const handleDownloadPdf = async () => {
+    if (isExceedingMax) {
+      setShowOverLimitModal(true);
+      return;
+    }
+    if (!sessionId) {
+      setExportError("Session ID not found. Please refresh the page to download.");
+      return;
+    }
+    setIsExportingPdf(true);
+    setExportError(null);
+    try {
+      await exportResumePdf(sessionId, activeTailored?.name);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to export PDF";
+      setExportError(msg);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleDownloadDocx = async () => {
+    if (isExceedingMax) {
+      setShowOverLimitModal(true);
+      return;
+    }
+    if (!sessionId) {
+      setExportError("Session ID not found. Please refresh the page to download.");
+      return;
+    }
+    setIsExportingDocx(true);
+    setExportError(null);
+    try {
+      await exportResumeDocx(sessionId, activeTailored?.name);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to export DOCX";
+      setExportError(msg);
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
+
   const handlePrint = () => {
     if (isExceedingMax) {
       setShowOverLimitModal(true);
       return;
     }
-    // Set document.title temporarily to candidate's name so PDF filename & print header
-    // are clean and don't include the website/project title
-    const originalTitle = document.title;
-    if (activeTailored?.name) {
-      document.title = `${activeTailored.name} - Resume`;
-    } else {
-      document.title = "Resume";
-    }
-    window.print();
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 1000);
-  };
-
-  const handleDocxClick = () => {
-    if (isExceedingMax) {
-      setShowOverLimitModal(true);
+    const printEl = document.getElementById("printable-tailored-resume");
+    if (!printEl) {
+      window.print();
       return;
     }
-    setDocxToast(true);
-    setTimeout(() => setDocxToast(false), 4000);
+
+    // Isolate printable resume in a clean iframe so browser print never produces blank pages or website chrome
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) return;
+
+    const candidateTitle = activeTailored?.name ? `${activeTailored.name} - Resume` : "Resume";
+
+    // Clone element and strip print:hidden items
+    const clone = printEl.cloneNode(true) as HTMLElement;
+    clone
+      .querySelectorAll('.print\\:hidden, [class*="print:hidden"], .page-break-divider')
+      .forEach((el) => el.remove());
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${candidateTitle}</title>
+          <style>
+            @page {
+              size: letter;
+              margin: 0.5in;
+            }
+            *, *::before, *::after {
+              box-sizing: border-box;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              background: white;
+              color: #111827;
+              font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            h1 { font-size: 18pt; font-weight: bold; text-align: center; text-transform: uppercase; margin: 0 0 2pt 0; }
+            h3 { font-size: 10.5pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #CCCCCC; padding-bottom: 2pt; margin: 8pt 0 4pt 0; }
+            p { margin: 0; }
+            ul { margin: 2pt 0 4pt 0; padding-left: 14pt; list-style-type: disc; }
+            li { font-size: 9.5pt; line-height: 1.25; margin-bottom: 2pt; color: #1f2937; }
+            .flex { display: flex; }
+            .justify-between { justify-content: space-between; }
+            .font-bold { font-weight: bold; }
+            .font-semibold { font-weight: 600; }
+            .font-medium { font-weight: 500; }
+            .uppercase { text-transform: uppercase; }
+            .text-xs { font-size: 10pt; }
+            .text-\\[11px\\] { font-size: 9.5pt; }
+            .text-\\[10px\\] { font-size: 9pt; }
+            .text-zinc-500, .text-zinc-600 { color: #6b7280; }
+            .text-zinc-700 { color: #374151; }
+            .text-zinc-900 { color: #111827; }
+            .space-y-0\\.5 > * + * { margin-top: 2pt; }
+            .space-y-1 > * + * { margin-top: 3pt; }
+            .space-y-1\\.5 > * + * { margin-top: 4pt; }
+            .space-y-2 > * + * { margin-top: 5pt; }
+            .space-y-2\\.5 > * + * { margin-top: 6pt; }
+            .space-y-3\\.5 > * + * { margin-top: 8pt; }
+          </style>
+        </head>
+        <body>
+          ${clone.innerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    }, 250);
   };
 
   return (
@@ -208,24 +325,50 @@ export function FinalComparison({
             </div>
           )}
 
+          {/* Direct Vector PDF Download (Backend ReportLab ATS Engine) */}
           <button
-            onClick={handlePrint}
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
             className={`cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition-all ${
               isExceedingMax
                 ? "bg-zinc-500 hover:bg-zinc-600 cursor-not-allowed"
-                : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                : "bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
             }`}
+            title="Download ATS-compliant vector PDF directly"
           >
-            <Printer className="h-3.5 w-3.5" />
-            <span>Print / Save as PDF</span>
+            {isExportingPdf ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileDown className="h-3.5 w-3.5" />
+            )}
+            <span>{isExportingPdf ? "Generating PDF..." : "Download PDF"}</span>
           </button>
 
+          {/* Direct DOCX Download (Backend python-docx ATS Engine) */}
           <button
-            onClick={handleDocxClick}
-            className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 transition-colors"
+            onClick={handleDownloadDocx}
+            disabled={isExportingDocx}
+            className={`cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 transition-colors shadow-xs ${
+              isExportingDocx ? "opacity-75 cursor-wait" : ""
+            }`}
+            title="Download structured editable Word (.docx) document"
           >
-            <FileDown className="h-3.5 w-3.5" />
-            <span>Download DOCX</span>
+            {isExportingDocx ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+            )}
+            <span>{isExportingDocx ? "Generating DOCX..." : "Download DOCX"}</span>
+          </button>
+
+          {/* Isolated Clean Browser Print */}
+          <button
+            onClick={handlePrint}
+            className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 transition-colors shadow-xs"
+            title="Print or preview via browser print dialog"
+          >
+            <Printer className="h-3.5 w-3.5 text-zinc-500" />
+            <span>Print</span>
           </button>
         </div>
       </div>
@@ -275,13 +418,14 @@ export function FinalComparison({
         </div>
       )}
 
-      {/* DOCX Coming Soon Toast */}
-      {docxToast && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-between shadow-sm animate-in fade-in print:hidden">
-          <span>
-            DOCX reconstruction endpoint is scheduled for backend development. Please use <strong>Print / Save as PDF</strong> for an immediate high-fidelity export.
-          </span>
-          <button onClick={() => setDocxToast(false)} className="underline ml-2 cursor-pointer">
+      {/* Export Error Notification */}
+      {exportError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between shadow-xs animate-in fade-in print:hidden">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+            <span>{exportError}</span>
+          </div>
+          <button onClick={() => setExportError(null)} className="underline ml-2 cursor-pointer font-medium hover:text-red-900">
             Dismiss
           </button>
         </div>
@@ -760,47 +904,7 @@ export function FinalComparison({
           </div>
         </div>
       )}
-
-      {/* Global Print Stylesheet for Clean 1 or 2-Page Export (Zero Artifacts) */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: letter;
-            margin: 0.5in;
-          }
-          body {
-            background: white !important;
-            color: black !important;
-          }
-          /* Hide all page chrome, headers, navigation, sidebars, and project titles */
-          body * {
-            visibility: hidden;
-          }
-          /* Exclusively show the tailored printable resume container and its contents */
-          #printable-tailored-resume,
-          #printable-tailored-resume * {
-            visibility: visible;
-          }
-          #printable-tailored-resume {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-            background: transparent !important;
-          }
-          /* Force display: none on any print:hidden element */
-          .print\\:hidden,
-          [class*="print:hidden"],
-          .page-break-divider {
-            display: none !important;
-            visibility: hidden !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
+

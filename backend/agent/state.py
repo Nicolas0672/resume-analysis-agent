@@ -40,5 +40,7 @@ class AgentState(TypedDict):
 
     feedbacks: Feedbacks
 
+    iteration_loop: int
+
     
 

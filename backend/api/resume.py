@@ -1,16 +1,32 @@
 import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
 from backend.agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
+from backend.model.job_pydantic import (
+    AddBulletRequest,
+    AddEntryRequest,
+    EditEntryRequest,
+    EditSkillsRequest,
+    ResumeStructure,
+    UpdateResumeRequest,
+)
+from backend.services.docx_exporter import generate_docx
+from backend.services.pdf_exporter import generate_pdf
 from backend.services.resume_service import (
+    add_resume_bullet,
+    add_resume_entry,
     apply_tailored_bullets,
     delete_bullet,
     delete_entry,
     edit_resume_bullets,
+    edit_resume_skills,
     edit_tailored_bullets,
     process_resume_analysis,
+    update_full_resume,
+    update_resume_entry,
 )
 from backend.api.auth import get_current_user, verify_session_ownership
 from backend.repository.resume_repository import create_user_session, get_user_sessions
@@ -218,6 +234,111 @@ async def delete_entries(
     return state
 
 
+@router.post("/edit-entry")
+async def edit_entry_endpoint(
+    payload: EditEntryRequest,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not payload.session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+
+    patch_dict = payload.model_dump(exclude={"session_id", "entry_id"}, exclude_none=True)
+    state = await update_resume_entry(
+        session_id=payload.session_id,
+        request=request,
+        entry_id=payload.entry_id,
+        patch_data=patch_dict,
+    )
+    return state
+
+
+@router.post("/add-bullet")
+async def add_bullet_endpoint(
+    payload: AddBulletRequest,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not payload.session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+
+    state = await add_resume_bullet(
+        session_id=payload.session_id,
+        request=request,
+        entry_id=payload.entry_id,
+        text=payload.text,
+    )
+    return state
+
+
+@router.post("/add-entry")
+async def add_entry_endpoint(
+    payload: AddEntryRequest,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not payload.session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+
+    state = await add_resume_entry(
+        session_id=payload.session_id,
+        request=request,
+        section_type=payload.section_type,
+        entry_data=payload.entry,
+    )
+    if state.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Session not found")
+    if state.get("status") == "invalid_section":
+        raise HTTPException(status_code=400, detail="Invalid section type")
+    return state
+
+
+
+@router.post("/edit-skills")
+async def edit_skills_endpoint(
+    payload: EditSkillsRequest,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not payload.session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+
+    state = await edit_resume_skills(
+        session_id=payload.session_id,
+        request=request,
+        skills=payload.skills,
+    )
+    return state
+
+
+@router.post("/update-resume")
+async def update_resume_endpoint(
+    payload: UpdateResumeRequest,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not payload.session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+
+    state = await update_full_resume(
+        session_id=payload.session_id,
+        request=request,
+        resume_to_edit=payload.resume_to_edit,
+    )
+    return state
+
+
+
 @router.get("/sessions")
 async def list_my_sessions(current_user: dict = Depends(get_current_user)):
     """Retrieve all previous tailoring sessions owned by the authenticated user."""
@@ -225,3 +346,87 @@ async def list_my_sessions(current_user: dict = Depends(get_current_user)):
         "success": True,
         "sessions": get_user_sessions(user_id=current_user["id"]),
     }
+
+
+@router.get("/export/pdf")
+async def export_resume_pdf(
+    session_id: str,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Exports the working tailored resume (resume_to_edit) as an ATS-compliant vector PDF."""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+
+    config = {"configurable": {"thread_id": session_id}}
+    graph_with_memory = request.app.state.graph_with_memory
+    snapshot = await graph_with_memory.aget_state(config)
+
+    if not snapshot or not snapshot.values:
+        raise HTTPException(status_code=404, detail="Session not found or empty")
+
+    resume_data = snapshot.values.get("resume_to_edit") or snapshot.values.get("resume_data")
+    if not resume_data:
+        raise HTTPException(status_code=404, detail="No resume data found for this session")
+
+    if isinstance(resume_data, dict):
+        resume_structure = ResumeStructure.model_validate(resume_data)
+    else:
+        resume_structure = resume_data
+
+    pdf_buffer = generate_pdf(resume_structure)
+    candidate_name = (resume_structure.name or "Resume").replace(" ", "_").strip()
+    filename = f"{candidate_name}_Tailored_Resume.pdf"
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get("/export/docx")
+async def export_resume_docx(
+    session_id: str,
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Exports the working tailored resume (resume_to_edit) as a structured Word DOCX document."""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+
+    config = {"configurable": {"thread_id": session_id}}
+    graph_with_memory = request.app.state.graph_with_memory
+    snapshot = await graph_with_memory.aget_state(config)
+
+    if not snapshot or not snapshot.values:
+        raise HTTPException(status_code=404, detail="Session not found or empty")
+
+    resume_data = snapshot.values.get("resume_to_edit") or snapshot.values.get("resume_data")
+    if not resume_data:
+        raise HTTPException(status_code=404, detail="No resume data found for this session")
+
+    if isinstance(resume_data, dict):
+        resume_structure = ResumeStructure.model_validate(resume_data)
+    else:
+        resume_structure = resume_data
+
+    docx_buffer = generate_docx(resume_structure)
+    candidate_name = (resume_structure.name or "Resume").replace(" ", "_").strip()
+    filename = f"{candidate_name}_Tailored_Resume.docx"
+
+    return StreamingResponse(
+        docx_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )

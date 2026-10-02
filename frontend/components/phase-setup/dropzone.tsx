@@ -22,6 +22,8 @@ import { getUserSessions } from "@/lib/api-client";
 import { UserSessionSummary } from "@/lib/types";
 import { ResiLogo } from "@/components/logo";
 import { CompanyLogo } from "@/components/company-logo";
+import { createClient } from "@/lib/supabase/client";
+import { TelemetryButton, TelemetryStage } from "@/components/telemetry-button";
 
 interface DropzoneProps {
   isLoading: boolean;
@@ -32,7 +34,7 @@ interface DropzoneProps {
   onSelectSession?: (sessionId: string) => void;
 }
 
-const INTAKE_STAGES = [
+const INTAKE_STAGES: TelemetryStage[] = [
   {
     stage: "STAGE [1/4]",
     label: "Parsing .docx structure & semantic sections...",
@@ -89,43 +91,12 @@ export function Dropzone({
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Background loading stage ticker
-  const [stageIndex, setStageIndex] = useState(0);
-  const [progressPercent, setProgressPercent] = useState(12);
-
   // Recent dossiers state
   const [sessions, setSessions] = useState<UserSessionSummary[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Sequential loading ticker during 10-second background extraction
-  useEffect(() => {
-    if (!isLoading) {
-      setStageIndex(0);
-      setProgressPercent(12);
-      return;
-    }
-
-    // Advance through 4 telemetry stages over ~9.6 seconds
-    const stageTimer = setInterval(() => {
-      setStageIndex((prev) => (prev < INTAKE_STAGES.length - 1 ? prev + 1 : prev));
-    }, 2400);
-
-    // Smoothly increment progress bar up to 94%
-    const progressTimer = setInterval(() => {
-      setProgressPercent((prev) => {
-        if (prev >= 94) return 94;
-        return prev + 1;
-      });
-    }, 110);
-
-    return () => {
-      clearInterval(stageTimer);
-      clearInterval(progressTimer);
-    };
-  }, [isLoading]);
 
   const fetchSessions = async () => {
     setIsLoadingSessions(true);
@@ -142,7 +113,29 @@ export function Dropzone({
   };
 
   useEffect(() => {
+    let isMounted = true;
+
+    // 1. Initial attempt
     fetchSessions();
+
+    // 2. React to auth state readiness (e.g. INITIAL_SESSION or SIGNED_IN right after login)
+    try {
+      const supabase = createClient();
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+        if (isMounted && session?.access_token) {
+          fetchSessions();
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    } catch {
+      // Supabase envs might be unset during initial config
+    }
   }, []);
 
   // If backend returns fallback needed, automatically switch to paste tab
@@ -456,61 +449,24 @@ export function Dropzone({
             </div>
 
             {/* Morphing Telemetry HUD Start Button */}
-            <button
+            <TelemetryButton
               type="submit"
+              isLoading={isLoading}
               disabled={isLoading || Boolean(resumingSessionId)}
-              className={`relative overflow-hidden w-full rounded-xl transition-all duration-300 text-white ${
-                isLoading
-                  ? "bg-gradient-to-r from-zinc-950 via-stone-900 to-emerald-950 border border-emerald-500/40 p-4 shadow-lg shadow-emerald-950/20"
-                  : "bg-gradient-to-r from-zinc-900 via-stone-900 to-emerald-950/90 hover:from-zinc-900 hover:via-stone-800 hover:to-emerald-900 border border-emerald-500/25 hover:border-emerald-500/50 shadow-sm hover:shadow-md hover:shadow-emerald-950/30 p-3.5 sm:p-4 group cursor-pointer active:scale-[0.99]"
-              }`}
+              stages={INTAKE_STAGES}
+              cycleIntervalMs={2400}
+              variant="primary"
+              layout="detailed"
+              systemTag="BACKGROUND WORKSPACE ENGINE"
+              className="w-full"
             >
-              {isLoading ? (
-                /* Interactive Morphing Telemetry HUD during background execution */
-                <div className="flex flex-col text-left space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-mono">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                      <span className="font-semibold text-emerald-400 tracking-wider">
-                        {INTAKE_STAGES[stageIndex].stage}
-                      </span>
-                      <span className="text-stone-500">·</span>
-                      <span className="text-stone-300 font-medium">BACKGROUND WORKSPACE ENGINE</span>
-                    </div>
-                    <span className="text-emerald-400 font-mono font-semibold">
-                      {progressPercent}%
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400 shrink-0" />
-                    <span className="text-xs sm:text-sm font-sans font-medium text-stone-100">
-                      {INTAKE_STAGES[stageIndex].label}
-                    </span>
-                  </div>
-
-                  <div className="text-[10px] font-mono text-stone-400 pl-6">
-                    // {INTAKE_STAGES[stageIndex].detail}
-                  </div>
-
-                  <div className="w-full bg-stone-800/80 rounded-full h-1 overflow-hidden mt-1">
-                    <div
-                      className="bg-gradient-to-r from-emerald-500 to-emerald-300 h-full rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
+              <div className="flex items-center justify-center gap-2.5 font-semibold text-sm py-1">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 group-hover:scale-110 transition-transform">
+                  <ArrowRight className="h-3 w-3" />
                 </div>
-              ) : (
-                /* Sleek Dark Emerald-Slate Idle Trigger */
-                <div className="flex items-center justify-center gap-2.5 font-semibold text-sm">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 group-hover:scale-110 transition-transform">
-                    <ArrowRight className="h-3 w-3" />
-                  </div>
-                  <span className="tracking-wide">Initiate Agentic Tailoring Mission</span>
-
-                </div>
-              )}
-            </button>
+                <span className="tracking-wide">Initiate Agentic Tailoring Mission</span>
+              </div>
+            </TelemetryButton>
           </form>
         </div>
 

@@ -26,6 +26,8 @@ export interface ResumeLeadership {
   entry_id?: number | null;
   title: string;
   position?: string | null;
+  location?: string | null;
+  duration?: string | null;
   bullets: ResumeBullet[];
 }
 
@@ -44,6 +46,9 @@ export interface ResumeEducation {
 export interface ResumeProject {
   entry_id?: number | null;
   project_name?: string | null;
+  role?: string | null;
+  location?: string | null;
+  duration?: string | null;
   technologies?: string[] | null;
   bullets: ResumeBullet[];
 }
@@ -326,6 +331,55 @@ export interface DeleteEntryResponse {
   status: "deleted" | "not_found";
   resume_to_edit?: ResumeStructure;
 }
+
+export interface EditEntryPayload {
+  session_id: string;
+  entry_id: number;
+  company?: string | null;
+  job_title?: string | null;
+  project_name?: string | null;
+  role?: string | null;
+  title?: string | null;
+  position?: string | null;
+  institution?: string | null;
+  degree?: string | null;
+  field_of_study?: string | null;
+  location?: string | null;
+  duration?: string | null;
+  gpa?: string | null;
+  coursework?: string[] | null;
+  technologies?: string[] | null;
+  name?: string | null;
+  date?: string | null;
+}
+
+export interface EditEntryResponse {
+  status: "updated" | "not_found";
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface AddBulletResponse {
+  status: "added" | "not_found";
+  bullet?: ResumeBullet;
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface EditSkillsResponse {
+  status: "updated" | "not_found";
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface UpdateResumeResponse {
+  status: "updated" | "not_found";
+  resume_to_edit?: ResumeStructure;
+}
+
+export interface AddEntryResponse {
+  status: "added" | "invalid_section" | "not_found";
+  entry?: any;
+  resume_to_edit?: ResumeStructure;
+}
+
 
 export interface UserSessionSummary {
   session_id: string;
