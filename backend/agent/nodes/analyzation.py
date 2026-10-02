@@ -109,8 +109,8 @@ async def analyze_candidate(state: AgentState):
     """)
     ]
     )
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+    model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
     llm_structured = model.with_structured_output(CandidateAnalysis)

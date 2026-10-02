@@ -102,6 +102,7 @@ def get_user_sessions(user_id: str) -> list[dict]:
     """Retrieve all tailoring sessions belonging to an authenticated user."""
     if not DATABASE_URL:
         return []
+    print(f"Fetching sessions for user_id {user_id} from DB")
 
     try:
         with get_db_connection() as conn:
@@ -116,6 +117,7 @@ def get_user_sessions(user_id: str) -> list[dict]:
                     (str(user_id),),
                 )
                 rows = cur.fetchall()
+                print(f"Fetched {len(rows)} sessions for user_id {user_id}")
                 return [
                     {
                         "session_id": r[0],

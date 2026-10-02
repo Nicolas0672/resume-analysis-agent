@@ -5,8 +5,8 @@ from model.job_pydantic import JobDetails, ResumeStructure
 from services.helper import assign_entry_ids
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
 

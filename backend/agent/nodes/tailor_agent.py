@@ -59,8 +59,8 @@ async def evidence_mapper(state: AgentState):
         )
     ])
 
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+    model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
     llm_structured = model.with_structured_output(EvidenceMappingResult)
@@ -207,8 +207,8 @@ async def tailor_resume_bullet_points(state: AgentState):
     """
         )
     ])
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+    model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
     llm_matched_structured = model.with_structured_output(TailorMatchList)
@@ -253,8 +253,8 @@ async def tailor_resume_bullet_points(state: AgentState):
 
 async def critique_tailored_bullet_points(state: AgentState):
 
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+    model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
     llm_structured = model.with_structured_output(Feedbacks)
@@ -410,8 +410,8 @@ For each proposal:
 - Return the corrected bullet points for each topic.
 """), ("human", "Here is the feedback with evidence {feedback_with_evidence}")
     ])
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+    model = ChatOpenAI(
+        model="gpt-4o",
         temperature=0
     )
     llm_structured = model.with_structured_output(RegeneratedBulletsList)

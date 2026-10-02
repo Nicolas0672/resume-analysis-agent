@@ -19,7 +19,7 @@ import {
 } from "./types";
 import { createClient } from "./supabase/client";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/tailor";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/tailor";
 
 export class ApiError extends Error {
   constructor(message: string, public status?: number) {
