@@ -98,6 +98,8 @@ export function Dropzone({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_JOB_DESCRIPTION_LENGTH = 15000;
+
   const fetchSessions = async () => {
     setIsLoadingSessions(true);
     try {
@@ -201,8 +203,10 @@ export function Dropzone({
         setValidationError("Please provide a job listing URL.");
         return;
       }
+
       try {
         const parsed = new URL(jobLink.trim());
+
         if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
           throw new Error();
         }
@@ -210,13 +214,26 @@ export function Dropzone({
         setValidationError("Please provide a valid HTTP or HTTPS URL.");
         return;
       }
+
       onUpload(file, jobLink.trim(), undefined);
     } else {
-      if (!jobDescription.trim() || jobDescription.trim().length < 50) {
-        setValidationError("Please paste a complete job description (at least 50 characters).");
+      const trimmedDescription = jobDescription.trim();
+
+      if (!trimmedDescription || trimmedDescription.length < 50) {
+        setValidationError(
+          "Please paste a complete job description (at least 50 characters)."
+        );
         return;
       }
-      onUpload(file, undefined, jobDescription.trim());
+
+      if (trimmedDescription.length > MAX_JOB_DESCRIPTION_LENGTH) {
+        setValidationError(
+          `Job description is too large. Please paste a shorter job description (${MAX_JOB_DESCRIPTION_LENGTH} characters or less).`
+        );
+        return;
+      }
+
+      onUpload(file, undefined, trimmedDescription);
     }
   };
 
@@ -414,13 +431,14 @@ export function Dropzone({
                   <textarea
                     rows={6}
                     value={jobDescription}
+                    maxLength={MAX_JOB_DESCRIPTION_LENGTH}
                     onChange={(e) => setJobDescription(e.target.value)}
                     placeholder="Paste the target job description, responsibilities, and required competencies here..."
                     className="w-full rounded-xl border border-stone-300 bg-white p-3.5 text-sm text-zinc-900 placeholder:text-stone-600 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors shadow-2xs font-sans"
                   />
                   <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono text-stone-600">
                     <span>Deterministic keyword extraction enabled</span>
-                    <span>{jobDescription.length} characters</span>
+                    <span>{jobDescription.length.toLocaleString()} / {MAX_JOB_DESCRIPTION_LENGTH.toLocaleString()} characters</span>
                   </div>
                 </div>
               )}

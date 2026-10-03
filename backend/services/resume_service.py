@@ -21,6 +21,7 @@ from services.resume_pre_llm import structure_resume_data, validate_job_details
 from services.job_fetcher import fetch_job_details
 from services.document_parser import open_docx, parse_docx, parse_resume
 
+MAX_JOB_DESCRIPTION_LENGTH = 15000
 
 async def process_resume_analysis(
     file_bytes: bytes,
@@ -30,6 +31,15 @@ async def process_resume_analysis(
     parsed_resume = parse_resume(file_bytes)
 
     if job_description:
+        if len(job_description) > MAX_JOB_DESCRIPTION_LENGTH:
+            return {
+                "success": False,
+                "requires_job_description": True,
+                "error": "The pasted job description is too large. Please paste a shorter job description.",
+                "structured_resume": None,
+                "job_details": None,
+            }
+
         job_details = job_description
 
     elif job_url:
