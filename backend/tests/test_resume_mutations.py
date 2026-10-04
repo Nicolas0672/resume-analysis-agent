@@ -1,5 +1,9 @@
 import asyncio
+import os
 import unittest
+
+os.environ["OPENAI_API_KEY"] = "test-key"
+
 from model.job_pydantic import (
     ResumeBullet,
     ResumeCertification,
