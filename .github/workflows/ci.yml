@@ -10,9 +10,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Install uv
+        uses: actions/astral-sh/setup-uv@v10 
       - name: Install dependencies
         # installing dependencies via uv. same as requirements.txt but easier
         run: uv sync --locked
