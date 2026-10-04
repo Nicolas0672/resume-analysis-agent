@@ -5,7 +5,8 @@ from model.job_pydantic import JobDetails, ResumeStructure
 from services.helper import assign_entry_ids
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-model = ChatOpenAI(
+def get_model():
+    return ChatOpenAI(
         model="gpt-4o",
         temperature=0
     )
@@ -16,6 +17,7 @@ async def validate_job_details(job_details):
         ("user", "Validate the following job details and return a JSON object if valid. Here are the job details: {job_details}")
     ])
 
+    model = get_model()
     llm_structured = model.with_structured_output(JobDetails)
     response = await llm_structured.ainvoke(prompt.format_messages(job_details=job_details))
     return response
@@ -25,7 +27,7 @@ async def structure_resume_data(resume_data):
         ("system", "You are a resume data structuring agent. If the resume data is valid, return a JSON object. Do not change the resume data. Only use resume data provided. Entry ID should be unique throughout the entire resume. No duplicate Entry ID is allowed"),
         ("user", "Validate the following resume data and return a JSON object if valid. Here are the resume data: {resume_data}")
     ])
-
+    model = get_model()
     llm_structured = model.with_structured_output(ResumeStructure)
     response = await llm_structured.ainvoke(prompt.format_messages(resume_data=resume_data))
 

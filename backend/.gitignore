@@ -14,3 +14,7 @@ wheels/
 .data
 .venv/
 venv/
+
+SYSTEM_AUDIT_AND_SCALING.md
+
+INTERVIEW_PREP_AND_SYSTEMS_GUIDE.md

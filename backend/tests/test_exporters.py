@@ -11,6 +11,7 @@ from model.job_pydantic import (
     ResumeSkills,
     ResumeStructure,
 )
+
 from services.docx_exporter import generate_docx
 from services.pdf_exporter import generate_pdf
 
