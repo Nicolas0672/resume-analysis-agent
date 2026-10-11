@@ -31,7 +31,7 @@ from services.resume_service import (
 from api.auth import get_current_user, verify_session_ownership
 from repository.resume_repository import create_user_session, get_user_sessions
 
-router = APIRouter(prefix="/api/tailor")
+router = APIRouter(prefix="/api")
 
 
 @router.post("/upload")
@@ -72,7 +72,7 @@ async def upload_resume(
     job_title = job_details.get("job_title") if isinstance(job_details, dict) else getattr(job_details, "job_title", None)
     job_company = job_details.get("job_company") if isinstance(job_details, dict) else getattr(job_details, "job_company", None)
 
-    create_user_session(
+    await create_user_session(
         session_id=session_id,
         user_id=current_user["id"],
         job_title=job_title,
@@ -110,7 +110,7 @@ async def chat(
         raise HTTPException(status_code=400, detail="User message is required")
 
     # Authorize session ownership before touching LangGraph checkpointer
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     response = await resume_tailoring_session(
         session_id=session_id, user_message=user_message, request=request
@@ -132,7 +132,7 @@ async def apply_tailoring(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     result = await apply_tailored_bullets(
         session_id=session_id, topic_id=topic_id, request=request
@@ -152,7 +152,7 @@ async def custom_tailoring(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     result = await edit_tailored_bullets(
         session_id=session_id,
@@ -173,7 +173,7 @@ async def get_session(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     state = await get_session_state(session_id=session_id, request=request)
 
@@ -193,7 +193,7 @@ async def delete_bullets(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     state = await delete_bullet(sentence_id=sentence_id, session_id=session_id, request=request)
     return state
@@ -210,7 +210,7 @@ async def edit_resume_bullet(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     state = await edit_resume_bullets(
         sentence_id=sentence_id, session_id=session_id, request=request, new_text=new_text
@@ -228,7 +228,7 @@ async def delete_entries(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     state = await delete_entry(entry_id=entry_id, session_id=session_id, request=request)
     return state
@@ -243,7 +243,7 @@ async def edit_entry_endpoint(
     if not payload.session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
 
     patch_dict = payload.model_dump(exclude={"session_id", "entry_id"}, exclude_none=True)
     state = await update_resume_entry(
@@ -264,7 +264,7 @@ async def add_bullet_endpoint(
     if not payload.session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
 
     state = await add_resume_bullet(
         session_id=payload.session_id,
@@ -284,7 +284,7 @@ async def add_entry_endpoint(
     if not payload.session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
 
     state = await add_resume_entry(
         session_id=payload.session_id,
@@ -309,7 +309,7 @@ async def edit_skills_endpoint(
     if not payload.session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
 
     state = await edit_resume_skills(
         session_id=payload.session_id,
@@ -328,7 +328,7 @@ async def update_resume_endpoint(
     if not payload.session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=payload.session_id, user_id=current_user["id"])
 
     state = await update_full_resume(
         session_id=payload.session_id,
@@ -344,7 +344,7 @@ async def list_my_sessions(current_user: dict = Depends(get_current_user)):
     """Retrieve all previous tailoring sessions owned by the authenticated user."""
     return {
         "success": True,
-        "sessions": get_user_sessions(user_id=current_user["id"]),
+        "sessions": await get_user_sessions(user_id=current_user["id"]),
     }
 
 
@@ -358,7 +358,7 @@ async def export_resume_pdf(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     config = {"configurable": {"thread_id": session_id}}
     graph_with_memory = request.app.state.graph_with_memory
@@ -400,7 +400,7 @@ async def export_resume_docx(
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
 
-    verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     config = {"configurable": {"thread_id": session_id}}
     graph_with_memory = request.app.state.graph_with_memory
