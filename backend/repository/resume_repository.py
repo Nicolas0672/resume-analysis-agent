@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 import psycopg
 from dotenv import load_dotenv
+from psycopg_pool import AsyncConnectionPool
 
 load_dotenv()
 
@@ -10,23 +11,33 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+_pool: Optional[AsyncConnectionPool] = None
 
-def get_db_connection():
-    if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable is not set")
-    return psycopg.connect(DATABASE_URL)
+async def init_db_pool():
+    global _pool
+    _pool = AsyncConnectionPool(DATABASE_URL, min_size=2, max_size=10, open=False)
+    await _pool.open()
 
+async def close_db_pool():
+    global _pool
+    if _pool:
+        await _pool.close()
 
-def init_db():
+def get_pool():
+    if _pool is None:
+        raise RuntimeError("Pool not initialized")
+    return _pool.connection()
+
+async def init_db():
     """Ensure the user_sessions table and indexes exist in Supabase Postgres."""
     if not DATABASE_URL:
         logger.warning("DATABASE_URL not set; skipping database initialization")
         return
 
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+        async with get_pool() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     create table if not exists user_sessions (
                         session_id text primary key,
@@ -38,13 +49,13 @@ def init_db():
                     create index if not exists idx_user_sessions_user_id on user_sessions(user_id);
                     """
                 )
-            conn.commit()
+            await conn.commit()
             logger.info("user_sessions table verified in Supabase Postgres")
     except Exception as e:
         logger.error(f"Failed to initialize database tables: {e}")
 
 
-def create_user_session(
+async def create_user_session(
     session_id: str,
     user_id: str,
     job_title: Optional[str] = None,
@@ -55,9 +66,9 @@ def create_user_session(
         return False
 
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+        async with get_pool() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     insert into user_sessions (session_id, user_id, job_title, job_company)
                     values (%s, %s, %s, %s)
@@ -67,29 +78,29 @@ def create_user_session(
                     """,
                     (session_id, str(user_id), job_title, job_company),
                 )
-            conn.commit()
+            await conn.commit()
             return True
     except Exception as e:
         logger.error(f"Error creating user session in DB: {e}")
         return False
 
 
-def check_session_owner(session_id: str, user_id: str) -> bool:
+async def check_session_owner(session_id: str, user_id: str) -> bool:
     """Verify whether a session_id belongs to the requesting authenticated user."""
     if not DATABASE_URL:
         # If no DB configured, fallback to allow in dev mode
         return True
 
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+        async with get_pool() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     select user_id from user_sessions where session_id = %s;
                     """,
                     (session_id,),
                 )
-                row = cur.fetchone()
+                row = await cur.fetchone()
                 if not row:
                     return False
                 return str(row[0]) == str(user_id)
@@ -98,15 +109,16 @@ def check_session_owner(session_id: str, user_id: str) -> bool:
         return False
 
 
-def get_user_sessions(user_id: str) -> list[dict]:
+async def get_user_sessions(user_id: str) -> list[dict]:
     """Retrieve all tailoring sessions belonging to an authenticated user."""
     if not DATABASE_URL:
         return []
+    print(f"Fetching sessions for user_id: {user_id}")  # Debugging line
 
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+        async with get_pool() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     select session_id, job_title, job_company, created_at
                     from user_sessions
@@ -115,7 +127,7 @@ def get_user_sessions(user_id: str) -> list[dict]:
                     """,
                     (str(user_id),),
                 )
-                rows = cur.fetchall()
+                rows = await cur.fetchall()
 
                 return [
                     {

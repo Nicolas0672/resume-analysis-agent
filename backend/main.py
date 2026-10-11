@@ -14,11 +14,12 @@ from fastapi import FastAPI
 from api.resume import router as resume_router
 from fastapi.middleware.cors import CORSMiddleware
 
-from repository.resume_repository import init_db
+from repository.resume_repository import init_db, init_db_pool, close_db_pool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    await init_db_pool()
+    await init_db()
 
     DB_URI = os.environ["DATABASE_URL"]
 
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
         )
 
         yield
+
+    await close_db_pool()
 
 app = FastAPI(lifespan=lifespan)
 

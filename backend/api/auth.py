@@ -137,12 +137,12 @@ async def get_current_user(
     }
 
 
-def verify_session_ownership(session_id: str, user_id: str) -> None:
+async def verify_session_ownership(session_id: str, user_id: str) -> None:
     """
     Enforces that the requested session_id is owned by the authenticated user_id.
     Raises 403 Forbidden if the user does not own the session.
     """
-    is_owner = check_session_owner(session_id=session_id, user_id=user_id)
+    is_owner = await check_session_owner(session_id=session_id, user_id=user_id)
     if not is_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
