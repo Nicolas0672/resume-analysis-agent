@@ -99,6 +99,7 @@ export function Dropzone({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_JOB_DESCRIPTION_LENGTH = 15000;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const fetchSessions = async () => {
     setIsLoadingSessions(true);
@@ -149,7 +150,12 @@ export function Dropzone({
 
   useEffect(() => {
     if (pendingFile) {
-      setFile(pendingFile);
+      if (pendingFile.size > MAX_FILE_SIZE) {
+        setValidationError("File size exceeds the 10MB limit. Please upload a smaller DOCX file.");
+        setFile(null);
+      } else {
+        setFile(pendingFile);
+      }
     }
   }, [pendingFile]);
 
@@ -158,6 +164,10 @@ export function Dropzone({
       const selected = e.target.files[0];
       if (!selected.name.endsWith(".docx")) {
         setValidationError("Only Microsoft Word (.docx) files are supported currently.");
+        return;
+      }
+      if (selected.size > MAX_FILE_SIZE) {
+        setValidationError("File size exceeds the 10MB limit. Please upload a smaller DOCX file.");
         return;
       }
       setValidationError(null);
@@ -184,6 +194,10 @@ export function Dropzone({
         setValidationError("Only Microsoft Word (.docx) files are supported currently.");
         return;
       }
+      if (dropped.size > MAX_FILE_SIZE) {
+        setValidationError("File size exceeds the 10MB limit. Please upload a smaller DOCX file.");
+        return;
+      }
       setValidationError(null);
       setFile(dropped);
     }
@@ -195,6 +209,11 @@ export function Dropzone({
 
     if (!file) {
       setValidationError("Please upload your resume in .docx format.");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setValidationError("File size exceeds the 10MB limit. Please upload a smaller DOCX file.");
       return;
     }
 

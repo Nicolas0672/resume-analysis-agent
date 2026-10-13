@@ -1,6 +1,8 @@
 import uuid
+import zipfile
+from io import BytesIO
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends, status
 from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
@@ -33,6 +35,11 @@ from repository.resume_repository import create_user_session, get_user_sessions
 
 router = APIRouter(prefix="/api")
 
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_UNCOMPRESSED_SIZE = 50 * 1024 * 1024  # 50 MB
+MAX_COMPRESSION_RATIO = 100  # 100:1
+CHUNK_SIZE = 1024 * 1024  # 1 MB
+
 
 @router.post("/upload")
 async def upload_resume(
@@ -52,9 +59,46 @@ async def upload_resume(
             status_code=400, detail="Please provide either a job URL or a job description."
         )
 
+    # Immediate pre-read file size check
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File size exceeds the 10MB limit. Please upload a smaller DOCX file.",
+        )
+
     session_id = str(uuid.uuid4())
 
-    file_bytes = await file.read()
+    # Safe chunked read ceiling to prevent memory exhaustion on chunked or unreported payload sizes
+    file_bytes_acc = bytearray()
+    while chunk := await file.read(CHUNK_SIZE):
+        file_bytes_acc.extend(chunk)
+        if len(file_bytes_acc) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="File size exceeds the 10MB limit. Please upload a smaller DOCX file.",
+            )
+    file_bytes = bytes(file_bytes_acc)
+
+    # Validate ZIP structure and defend against ZIP bombs / excessive XML expansion
+    try:
+        with zipfile.ZipFile(BytesIO(file_bytes)) as zf:
+            total_uncompressed = sum(info.file_size for info in zf.infolist())
+            if total_uncompressed > MAX_UNCOMPRESSED_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="DOCX contents exceed safe uncompressed size limits.",
+                )
+            if len(file_bytes) > 0 and (total_uncompressed / len(file_bytes)) > MAX_COMPRESSION_RATIO:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Suspicious compressed file detected (compression ratio too high).",
+                )
+    except zipfile.BadZipFile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or corrupt DOCX archive.",
+        )
+
     resume_data = await process_resume_analysis(
         file_bytes=file_bytes, job_url=str(job_link) if job_link else None, job_description=job_description
     )
