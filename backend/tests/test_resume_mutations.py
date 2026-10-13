@@ -25,6 +25,8 @@ from services.helper import (
     get_next_entry_id,
     get_next_sentence_id,
     insert_entry_in_reverse_chronological_order,
+    session_lock,
+    session_locks,
 )
 from services.resume_service import (
     add_resume_bullet,
@@ -49,9 +51,11 @@ class MockGraph:
         self.state_dict = state_dict
 
     async def aget_state(self, config):
+        await asyncio.sleep(0.005)
         return MockSnapshot(self.state_dict)
 
     async def aupdate_state(self, config, update_dict):
+        await asyncio.sleep(0.005)
         self.state_dict.update(update_dict)
 
 
@@ -406,6 +410,40 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(exps[0].company, "Delta Systems")
         self.assertEqual(exps[1].company, "Acme Corp")
         self.assertEqual(exps[2].company, "Beta Inc")
+
+    async def test_concurrent_mutations_no_lost_updates(self):
+        # Fire 5 rapid concurrent bullet additions to the same session
+        tasks = [
+            add_resume_bullet(
+                session_id="concurrent_session",
+                request=self.request,
+                entry_id=0,
+                text=f"Concurrent bullet {i}",
+            )
+            for i in range(5)
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        # All 5 calls must succeed
+        for res in results:
+            self.assertEqual(res["status"], "added")
+
+        # The experience entry must contain all 5 added bullets + 2 original = 7 bullets
+        entry = next(e for e in self.state["resume_to_edit"].work_experience if e.entry_id == 0)
+        self.assertEqual(len(entry.bullets), 7)
+
+        # Crucially: after all 5 concurrent requests finish, session_locks dictionary must be completely clean (empty)
+        self.assertNotIn("concurrent_session", session_locks)
+
+    async def test_session_lock_cleanup_on_error(self):
+        # Verify that if an exception occurs inside the critical section, lock is cleanly released and popped
+        with self.assertRaises(ZeroDivisionError):
+            async with session_lock("failing_session"):
+                self.assertIn("failing_session", session_locks)
+                _ = 1 / 0
+
+        self.assertNotIn("failing_session", session_locks)
 
 
 if __name__ == "__main__":

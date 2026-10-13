@@ -1,6 +1,8 @@
 import re
 from typing import Any
 from model.job_pydantic import ResumeStructure
+import asyncio
+from contextlib import asynccontextmanager
 
 
 MONTHS_MAP = {
@@ -165,3 +167,24 @@ def assign_entry_ids(resume: ResumeStructure) -> ResumeStructure:
             next_id += 1
 
     return resume
+
+session_locks: dict[str, list] = {}
+
+@asynccontextmanager
+async def session_lock(session_id: str):
+    if session_id not in session_locks:
+        session_locks[session_id] = [asyncio.Lock(), 0]
+
+    entry = session_locks[session_id]
+    entry[1] += 1
+    lock = entry[0]
+
+    await lock.acquire()
+
+    try:
+        yield
+    finally:
+        lock.release()
+        entry[1] -= 1
+        if entry[1] == 0:
+            session_locks.pop(session_id, None)
