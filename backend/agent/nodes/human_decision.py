@@ -68,7 +68,7 @@ def human_after_interview_planner(state: AgentState):
     }
 
 def human_investigate_chat(state: AgentState):
-    answer = interrupt({
+    payload = interrupt({
         "stage": "investigation",
         "type": "investigation_chat",
         "message": (
@@ -76,9 +76,24 @@ def human_investigate_chat(state: AgentState):
             if state["investigation_messages"]
             else "No previous conversation available as of current"
         ),
-        "options": [],
+        "options": [
+            {"id": "conclude", "label": "Wrap Up & Save Evidence"},
+            {"id": "skip", "label": "Skip Topic"},
+        ],
     })
 
-    return {
-        "investigation_messages": [HumanMessage(content=answer)]
+    if isinstance(payload, dict):
+        action = payload.get("action", "chat")
+        message = payload.get("message", "")
+    else:
+        action = "chat"
+        message = str(payload) if payload is not None else ""
+
+    result = {
+        "human_investigate_action": action,
     }
+
+    if message and str(message).strip():
+        result["investigation_messages"] = [HumanMessage(content=str(message).strip())]
+
+    return result

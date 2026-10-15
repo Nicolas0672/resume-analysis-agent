@@ -66,7 +66,7 @@ interface InterviewWorkspaceProps {
   investigationMessages: ChatMessage[];
   isLoading: boolean;
   onSelectTopic: (topicId: string) => void;
-  onSubmitAnswer: (answer: string) => void;
+  onSubmitAnswer: (answer: string, action?: "chat" | "conclude" | "skip") => void;
   onProceedToTailoring: () => void;
 }
 
@@ -176,22 +176,22 @@ export function InterviewWorkspace({
     if (!answerInput.trim() || isLoading) return;
     const text = answerInput.trim();
     setAnswerInput("");
-    onSubmitAnswer(text);
+    onSubmitAnswer(text, "chat");
   };
 
   // Respectful, positive wrap-up that extracts and finalizes evidence without claiming lack of experience
   const handleWrapUpTopic = () => {
     if (isLoading) return;
-    onSubmitAnswer(
-      "I have provided all the relevant details for this experience. Please summarize and record any verified tools, metrics, or ownership discussed, and let's proceed to the next topic."
-    );
+    const text = answerInput.trim();
+    setAnswerInput("");
+    onSubmitAnswer(text, "conclude");
   };
 
-  // Fallback skip for requirements the candidate truly never touched
+  // Direct skip for requirements the candidate truly never touched
   const handlePreFillSkip = () => {
-    setAnswerInput(
-      "I do not have direct verifiable experience with this requirement, let's move on to the next topic."
-    );
+    if (isLoading) return;
+    setAnswerInput("");
+    onSubmitAnswer("", "skip");
   };
 
   const priorityBadge = (priority: "High" | "Medium" | "Low") => {

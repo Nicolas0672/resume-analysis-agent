@@ -13,7 +13,8 @@ def reset_investigation(state: AgentState):
         "investigation_messages": [
             RemoveMessage(id=message.id)
             for message in state["investigation_messages"]
-        ]
+        ],
+        "human_investigate_action": "chat",
     }
 
 async def investigate_candidate(state: AgentState):
@@ -54,6 +55,7 @@ Your job is not to interrogate the candidate about the job requirement.
 
 Your job is to reason across the job requirement, investigation objective, candidate's resume, previous conversation, and accumulated evidence to discover where the candidate may have relevant evidence that has not yet been surfaced.
 
+Once determined that the candidate has provided sufficient evidence, mention that Candidate should click on "Wrap Up And Save Evidence" to concluyde the investigation.
 Before asking each question:
 
 1. Understand what the job requirement is actually trying to evaluate.
@@ -117,15 +119,9 @@ If the response:
 
 Ask EXACTLY ONE question at a time.
 
-### Stop conditions
+### Question behavior
 
-Stop when:
-* the evidence is sufficient to support strong resume bullets;
-* the candidate cannot provide additional useful evidence;
-* no credible connection to the requirement can be established;
-* the candidate asks to stop.
-
-The goal is not to close every job-requirement gap. The goal is to discover the highest-value truthful evidence available from the candidate with the fewest useful questions.
+Ask EXACTLY ONE question at a time. The candidate controls when to conclude or skip the investigation. Your role during active chat is to ask one thoughtful, conversational question to explore relevant evidence that has not yet been surfaced.
 """),
     ("human", 
      """conversation history: {conversation_history}, 
@@ -139,6 +135,66 @@ The goal is not to close every job-requirement gap. The goal is to discover the 
      """)
     ])
 
+    action = state.get("human_investigate_action", "chat")
+
+    # Case 1: Human explicitly skipped this topic
+    if action == "skip":
+        return {
+            "investigation_messages": [
+                AIMessage(content="Understood. We've skipped this topic and won't include it in tailoring.")
+            ],
+            "need_more_info": False,
+            "completed_topic_ids": [topic_id],
+        }
+
+    # Case 2: Human explicitly concluded / wrapped up this topic
+    if action == "conclude":
+        conclude_system_prompt = """
+You are an evidence synthesis agent. The candidate has concluded this investigation topic.
+
+Your task is to:
+1. Thoroughly review the conversation history and all accumulated candidate statements for this topic.
+2. Extract all truthful, verified evidence discovered during the conversation into the Evidence schema (including project/company name, actions, ownership, tools/technologies, metrics, scale, and impact).
+3. If no relevant evidence was found or the candidate lacked experience, set evidence to None.
+4. Provide a warm, concise user_message summarizing what was established and confirming that this topic is concluded.
+DO NOT ask any questions. Do not ask for more information.
+"""
+        conclude_prompt = ChatPromptTemplate.from_messages([
+            ("system", conclude_system_prompt),
+            ("human", 
+             """conversation history: {conversation_history}, 
+                topic: {topic}, 
+                reasoning for investigation: {reason}, 
+                any relevant experience: {relevant_experience}
+                objective: {objective}  
+                job requirement for context: {job_requirement}
+                relevant experience from resume: {relevant_experience_from_resume}
+                evidence_with_details: {evidence_with_details}
+             """)
+        ])
+
+        model = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0
+        )
+        llm_structured = model.with_structured_output(InvestigateOutput)
+        response = await llm_structured.ainvoke(conclude_prompt.format_messages(
+            topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
+            objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history, relevant_experience_from_resume=relevant_experience_from_resume,
+            evidence_with_details=evidence_with_details
+        ))
+
+        updated_details = EvidenceWithDetails(
+            job_requirement=selected.job_requirement, topic_id=selected.topic_id, evidence=response.evidence
+        )
+        return {
+            "investigation_messages": [AIMessage(content=response.user_message)],
+            "need_more_info": False,
+            "evidence_with_details": [updated_details],
+            "completed_topic_ids": [topic_id],
+        }
+
+    # Case 3: Human sent an answer to continue the conversation
     model = ChatOpenAI(
         model="gpt-4o",
         temperature=0
@@ -148,23 +204,11 @@ The goal is not to close every job-requirement gap. The goal is to discover the 
         topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
         objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history, relevant_experience_from_resume=relevant_experience_from_resume,
         evidence_with_details=evidence_with_details
-        ))
-    
-    if response.need_more_info == False:
-        updated_details = EvidenceWithDetails(
-            job_requirement=selected.job_requirement, topic_id=selected.topic_id, evidence=response.evidence
-        )
-        return {
-            "investigation_messages": [AIMessage(content=response.user_message)],
-            "need_more_info": response.need_more_info,
-            "evidence_with_details": [updated_details],
-            "completed_topic_ids": [topic_id]
-        }
-
+    ))
 
     return {
         "investigation_messages": [AIMessage(content=response.user_message)],
-        "need_more_info": response.need_more_info,
+        "need_more_info": True,
     }
     
 

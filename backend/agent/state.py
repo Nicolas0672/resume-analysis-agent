@@ -33,6 +33,7 @@ class AgentState(TypedDict):
 
     investigation_messages: Annotated[Sequence[BaseMessage], add_messages]
     evidence_with_details: Annotated[list[EvidenceWithDetails], add]
+    human_investigate_action: Optional[str]
     
     evidence_mapping: EvidenceMappingResult
 

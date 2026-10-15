@@ -22,7 +22,12 @@ async def initialize_tailoring_session(session_id: str, parsed_resume: dict, job
 
     return response
 
-async def resume_tailoring_session(session_id: str, user_message: str, request: Request = None):
+async def resume_tailoring_session(
+    session_id: str,
+    user_message: str,
+    action: str | None = None,
+    request: Request = None,
+):
     config = {
         "configurable": {
             "thread_id": session_id
@@ -38,15 +43,22 @@ async def resume_tailoring_session(session_id: str, user_message: str, request: 
         plan = state.values.get("interview_plan") if state and state.values else None
         if plan and hasattr(plan, "interview_plan"):
             known_topic_ids = {t.topic_id for t in plan.interview_plan}
-            if user_message.strip() in known_topic_ids:
+            if user_message and user_message.strip() in known_topic_ids:
                 from fastapi import HTTPException
                 raise HTTPException(
                     status_code=400,
                     detail=f"Active investigation probe in progress. Cannot switch to topic '{user_message}' while a question is pending.",
                 )
 
+        resume_val = {
+            "action": action or "chat",
+            "message": user_message or "",
+        }
+    else:
+        resume_val = user_message
+
     result = await graph_with_memory.ainvoke(
-        Command(resume=user_message),
+        Command(resume=resume_val),
         config=config,
     )
 

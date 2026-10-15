@@ -144,8 +144,8 @@ class Evidence(BaseModel):
     )
 
 class InvestigateOutput(BaseModel):
-    need_more_info: bool = Field(description="If more context is needed to investigate candidate experience, return True, else False")
-    user_message: str = Field(description="Message to the user asking for more details/clarification or letting them know they've provided enough context")
+    need_more_info: SkipJsonSchema[bool] = True
+    user_message: str = Field(description="Message to the user asking for more details/clarification or summarizing established experience")
     evidence: Evidence | None
 
 # Not created from LLM. Manually created from evidence extracted

@@ -489,22 +489,24 @@ export function useTailoringSession() {
 
   // Phase 2: Submit an answer during active probe
   const handleSubmitAnswer = useCallback(
-    async (answerText: string) => {
-      if (!sessionId || !answerText.trim()) return;
+    async (answerText: string, action: "chat" | "conclude" | "skip" = "chat") => {
+      if (!sessionId || (!answerText.trim() && action === "chat")) return;
 
-      const userMsg: ChatMessage = {
-        id: `user_${Date.now()}`,
-        role: "user",
-        content: answerText.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-
-      setInvestigationMessages((prev) => [...prev, userMsg]);
+      const trimmedText = answerText.trim();
+      if (trimmedText) {
+        const userMsg: ChatMessage = {
+          id: `user_${Date.now()}`,
+          role: "user",
+          content: trimmedText,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setInvestigationMessages((prev) => [...prev, userMsg]);
+      }
       setIsLoading(true);
       setError(null);
 
       try {
-        const res = await sendChatMessage(sessionId, answerText.trim());
+        const res = await sendChatMessage(sessionId, trimmedText, action);
 
         if ("interrupt" in res.ai_response) {
           const intr = res.ai_response.interrupt;

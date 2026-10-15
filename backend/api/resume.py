@@ -144,20 +144,21 @@ async def upload_resume(
 @router.post("/chat")
 async def chat(
     session_id: str = Form(...),
-    user_message: str = Form(...),
+    user_message: str = Form(""),
+    action: Optional[str] = Form(None),
     request: Request = None,
     current_user: dict = Depends(get_current_user),
 ):
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
-    if not user_message:
-        raise HTTPException(status_code=400, detail="User message is required")
+    if not user_message and not action:
+        raise HTTPException(status_code=400, detail="User message or action is required")
 
     # Authorize session ownership before touching LangGraph checkpointer
     await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
     response = await resume_tailoring_session(
-        session_id=session_id, user_message=user_message, request=request
+        session_id=session_id, user_message=user_message, action=action, request=request
     )
 
     return {

@@ -94,11 +94,15 @@ export async function uploadResume(
 
 export async function sendChatMessage(
   sessionId: string,
-  userMessage: string
+  userMessage: string,
+  action?: "chat" | "conclude" | "skip"
 ): Promise<ChatResponse> {
   const formData = new FormData();
   formData.append("session_id", sessionId);
   formData.append("user_message", userMessage);
+  if (action) {
+    formData.append("action", action);
+  }
 
   const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/chat`, {
