@@ -6,6 +6,7 @@ import {
   CandidateAnalysis,
   EditEntryPayload,
   EvidenceWithDetails,
+  ExperienceMetadata,
   Feedbacks,
   InterviewDetails,
   InterviewPlan,
@@ -26,6 +27,7 @@ import {
   editResumeEntry,
   editResumeSkills,
   getSessionState,
+  resetTopicChat,
   sendChatMessage,
   updateFullResume,
   uploadResume,
@@ -127,6 +129,7 @@ export function useTailoringSession() {
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [activeInterrupt, setActiveInterrupt] = useState<InterruptPayload | null>(null);
   const [investigationMessages, setInvestigationMessages] = useState<ChatMessage[]>([]);
+  const [activeExperienceMetadata, setActiveExperienceMetadata] = useState<ExperienceMetadata | null>(null);
 
   // Tailoring & verification
   const [tailorAnalysis, setTailorAnalysis] = useState<TailorAnalysis | null>(null);
@@ -196,6 +199,7 @@ export function useTailoringSession() {
           if (values.evidence_with_details) setEvidenceWithDetails(values.evidence_with_details as EvidenceWithDetails[]);
           if (values.tailor_analysis) setTailorAnalysis(values.tailor_analysis as TailorAnalysis);
           if (values.feedbacks) setFeedbacks(values.feedbacks as Feedbacks);
+          if (values.active_experience_metadata) setActiveExperienceMetadata(values.active_experience_metadata as ExperienceMetadata);
         }
 
         // Determine correct phase
@@ -469,6 +473,11 @@ export function useTailoringSession() {
         if ("interrupt" in res.ai_response) {
           const intr = res.ai_response.interrupt;
           setActiveInterrupt(intr);
+          if (intr.experience_metadata) {
+            setActiveExperienceMetadata(intr.experience_metadata);
+          } else {
+            setActiveExperienceMetadata(null);
+          }
           setInvestigationMessages([
             {
               id: `q_${Date.now()}`,
@@ -489,11 +498,15 @@ export function useTailoringSession() {
 
   // Phase 2: Submit an answer during active probe
   const handleSubmitAnswer = useCallback(
-    async (answerText: string, action: "chat" | "conclude" | "skip" = "chat") => {
+    async (
+      answerText: string,
+      action: "chat" | "conclude" | "skip" | "form_update" | "reset_topic" = "chat",
+      formDataPayload?: Record<string, any> | null
+    ) => {
       if (!sessionId || (!answerText.trim() && action === "chat")) return;
 
       const trimmedText = answerText.trim();
-      if (trimmedText) {
+      if (trimmedText && action === "chat") {
         const userMsg: ChatMessage = {
           id: `user_${Date.now()}`,
           role: "user",
@@ -506,11 +519,15 @@ export function useTailoringSession() {
       setError(null);
 
       try {
-        const res = await sendChatMessage(sessionId, trimmedText, action);
+        const res = await sendChatMessage(sessionId, trimmedText, action, formDataPayload);
 
         if ("interrupt" in res.ai_response) {
           const intr = res.ai_response.interrupt;
           setActiveInterrupt(intr);
+
+          if (intr.experience_metadata) {
+            setActiveExperienceMetadata(intr.experience_metadata);
+          }
 
           if (intr.type === "investigation_chat") {
             setInvestigationMessages((prev) => [
@@ -525,6 +542,7 @@ export function useTailoringSession() {
           } else if (intr.type === "investigation_selection") {
             // Topic completed! Returning to topic deck selection
             setActiveTopicId(null);
+            setActiveExperienceMetadata(null);
             // Refresh state to fetch updated completed_topic_ids and evidence_with_details
             const stateRes = await getSessionState(sessionId);
             const vals = extractStateValues(stateRes.state);
@@ -537,6 +555,89 @@ export function useTailoringSession() {
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to send answer");
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 2: Save metadata changes made on the live evidence form
+  const handleSaveFormMetadata = useCallback(
+    async (metadata: ExperienceMetadata) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const res = await sendChatMessage(
+          sessionId,
+          "Candidate updated experience details in the form.",
+          "form_update",
+          metadata
+        );
+
+        if ("interrupt" in res.ai_response) {
+          const intr = res.ai_response.interrupt;
+          setActiveInterrupt(intr);
+
+          if (intr.experience_metadata) {
+            setActiveExperienceMetadata(intr.experience_metadata);
+          } else {
+            setActiveExperienceMetadata(metadata);
+          }
+
+          if (intr.type === "investigation_chat") {
+            setInvestigationMessages((prev) => [
+              ...prev,
+              {
+                id: `q_${Date.now()}`,
+                role: "assistant",
+                content: intr.message,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              },
+            ]);
+          }
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to save form updates");
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
+  // Phase 2: Switch experience tab and reset current topic's investigation conversation
+  const handleResetTopicChat = useCallback(
+    async (newExperienceType: string) => {
+      if (!sessionId) return;
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const res = await resetTopicChat(sessionId, newExperienceType);
+
+        if ("interrupt" in res.ai_response) {
+          const intr = res.ai_response.interrupt;
+          setActiveInterrupt(intr);
+          setActiveExperienceMetadata({
+            experience_type: newExperienceType as ExperienceMetadata["experience_type"],
+          });
+          setInvestigationMessages([
+            {
+              id: `q_${Date.now()}`,
+              role: "assistant",
+              content: intr.message,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            },
+          ]);
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to reset topic chat");
+        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -842,6 +943,7 @@ export function useTailoringSession() {
     setRequiresJobDescriptionFallback(false);
     setFallbackErrorMessage(null);
     setPendingFile(null);
+    setActiveExperienceMetadata(null);
   }, [setPhase, updateSessionPersistence]);
 
   return {
@@ -864,6 +966,8 @@ export function useTailoringSession() {
     activeTopicId,
     activeInterrupt,
     investigationMessages,
+    activeExperienceMetadata,
+    setActiveExperienceMetadata,
     tailorAnalysis,
     feedbacks,
     appliedTopicIds,
@@ -872,6 +976,8 @@ export function useTailoringSession() {
     handleSelectAction,
     handleSelectTopic,
     handleSubmitAnswer,
+    handleSaveFormMetadata,
+    handleResetTopicChat,
     handleProceedToTailoring,
     handleApplyTailoring,
     handleCustomTailoring,

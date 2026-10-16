@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import {
   CandidateAnalysis,
   EvidenceWithDetails,
+  ExperienceMetadata,
   InterviewDetails,
   InterviewPlan,
   InterruptPayload,
   JobDetails,
 } from "@/lib/types";
+import { LiveEvidenceForm, ExperienceTabType } from "./live-evidence-form";
 import { ChatMessage } from "@/hooks/use-tailoring-session";
 import { useRotatingPhrase, SYNTHESIZING_PHRASES } from "@/hooks/use-rotating-phrase";
 import { CompanyLogo } from "@/components/company-logo";
@@ -64,9 +66,12 @@ interface InterviewWorkspaceProps {
   evidenceWithDetails: EvidenceWithDetails[];
   activeTopicId: string | null;
   investigationMessages: ChatMessage[];
+  activeExperienceMetadata?: ExperienceMetadata | null;
   isLoading: boolean;
   onSelectTopic: (topicId: string) => void;
   onSubmitAnswer: (answer: string, action?: "chat" | "conclude" | "skip") => void;
+  onSaveMetadata?: (metadata: ExperienceMetadata) => Promise<void>;
+  onResetTopicExperience?: (newExperienceType: ExperienceTabType) => Promise<void>;
   onProceedToTailoring: () => void;
 }
 
@@ -79,9 +84,12 @@ export function InterviewWorkspace({
   evidenceWithDetails,
   activeTopicId,
   investigationMessages,
+  activeExperienceMetadata = null,
   isLoading,
   onSelectTopic,
   onSubmitAnswer,
+  onSaveMetadata,
+  onResetTopicExperience,
   onProceedToTailoring,
 }: InterviewWorkspaceProps) {
   const [answerInput, setAnswerInput] = useState("");
@@ -90,6 +98,7 @@ export function InterviewWorkspace({
   const [selectedTopicPending, setSelectedTopicPending] = useState<string | null>(null);
   const [isProceeding, setIsProceeding] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [highlightFormErrors, setHighlightFormErrors] = useState(false);
 
   const synthesizingPhrase = useRotatingPhrase(SYNTHESIZING_PHRASES, isProceeding);
 
@@ -182,6 +191,27 @@ export function InterviewWorkspace({
   // Respectful, positive wrap-up that extracts and finalizes evidence without claiming lack of experience
   const handleWrapUpTopic = () => {
     if (isLoading) return;
+
+    // Validate required fields before submitting conclude
+    const meta = activeExperienceMetadata;
+    const type = meta?.experience_type || "work_experience";
+    let isMissing = false;
+    if (type === "work_experience") {
+      if (!meta?.company?.trim() || !meta?.job_title?.trim()) isMissing = true;
+    } else if (type === "project") {
+      if (!meta?.project_name?.trim() || !meta?.role?.trim()) isMissing = true;
+    } else if (type === "leadership") {
+      if (!meta?.leadership_title?.trim() || !meta?.position?.trim()) isMissing = true;
+    } else if (type === "other") {
+      if (!meta?.other_title?.trim()) isMissing = true;
+    }
+
+    if (isMissing) {
+      setHighlightFormErrors(true);
+      return;
+    }
+
+    setHighlightFormErrors(false);
     const text = answerInput.trim();
     setAnswerInput("");
     onSubmitAnswer(text, "conclude");
@@ -190,6 +220,7 @@ export function InterviewWorkspace({
   // Direct skip for requirements the candidate truly never touched
   const handlePreFillSkip = () => {
     if (isLoading) return;
+    setHighlightFormErrors(false);
     setAnswerInput("");
     onSubmitAnswer("", "skip");
   };
@@ -586,123 +617,142 @@ export function InterviewWorkspace({
                 </div>
               </div>
 
-              {/* Chat Thread */}
-              <div className="flex-1 p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[380px]">
-                {investigationMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
-                          : "bg-stone-100 text-zinc-900 dark:bg-stone-800 dark:text-zinc-100 border border-stone-200 dark:border-stone-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-1 text-[11px] opacity-70">
-                        {msg.role === "assistant" ? (
-                          <>
-                            <Sparkles className="h-3 w-3 text-emerald-500" />
-                            <span>Interview Agent</span>
-                          </>
-                        ) : (
-                          <span>You</span>
-                        )}
-                        <span>•</span>
-                        <span>{msg.timestamp}</span>
+              {/* 2-Column Side-by-Side Grid: Left Chat, Right Live Form */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 min-h-[460px] bg-stone-50/30 dark:bg-stone-900/30">
+                {/* Left Column: Chat Conversation Thread & Composer */}
+                <div className="lg:col-span-7 flex flex-col rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden shadow-xs">
+                  {/* Chat Thread */}
+                  <div className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[360px]">
+                    {investigationMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${
+                          msg.role === "user" ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                            msg.role === "user"
+                              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
+                              : "bg-stone-100 text-zinc-900 dark:bg-stone-800 dark:text-zinc-100 border border-stone-200 dark:border-stone-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1 text-[11px] opacity-70">
+                            {msg.role === "assistant" ? (
+                              <>
+                                <Sparkles className="h-3 w-3 text-emerald-500" />
+                                <span>Interview Agent</span>
+                              </>
+                            ) : (
+                              <span>You</span>
+                            )}
+                            <span>•</span>
+                            <span>{msg.timestamp}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                        </div>
                       </div>
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    </div>
+                    ))}
+
+                    {isLoading && (
+                      <div className="flex justify-start">
+                        <div className="rounded-2xl bg-stone-100 dark:bg-stone-800 px-4 py-3 text-sm text-stone-500 flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-stone-600 dark:text-stone-400" />
+                          <span>Analyzing your response & checking evidence...</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
 
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="rounded-2xl bg-stone-100 dark:bg-stone-800 px-4 py-3 text-sm text-stone-500 flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-stone-600 dark:text-stone-400" />
-                      <span>Analyzing your response & checking evidence...</span>
+                  {/* Response Composer */}
+                  <div className="p-4 border-t border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 space-y-3">
+                    {/* Guidance Chips & Safe Conclusion Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500">
+                      <span className="italic flex items-center gap-1">
+                        <HelpCircle className="h-3.5 w-3.5 text-stone-400" />
+                        Tip: Name specific tools, team scale, and measurable results.
+                      </span>
+
+                      <div className="flex items-center gap-3">
+                        {/* Respectful Wrap Up Action */}
+                        <button
+                          type="button"
+                          onClick={handleWrapUpTopic}
+                          disabled={isLoading}
+                          className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 font-semibold text-xs flex items-center gap-1"
+                        >
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Wrap Up & Save Evidence</span>
+                        </button>
+
+                        <span className="text-stone-300 dark:text-stone-700">•</span>
+
+                        {/* Rare skip option */}
+                        <button
+                          type="button"
+                          onClick={handlePreFillSkip}
+                          disabled={isLoading}
+                          className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-400 hover:text-rose-600 text-[11px]"
+                        >
+                          Skip topic
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Response Composer */}
-              <div className="p-4 border-t border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 rounded-b-xl space-y-3">
-                {/* Guidance Chips & Safe Conclusion Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500">
-                  <span className="italic flex items-center gap-1">
-                    <HelpCircle className="h-3.5 w-3.5 text-stone-400" />
-                    Tip: Name specific tools, team scale, and measurable results.
-                  </span>
+                    <form onSubmit={handleSend} className="space-y-2">
+                      <textarea
+                        rows={3}
+                        value={answerInput}
+                        onChange={(e) => setAnswerInput(e.target.value)}
+                        placeholder="Describe your hands-on experience, responsibilities, or specific project outcomes..."
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                          }
+                        }}
+                        className="w-full rounded-lg border border-stone-300 bg-white p-3 text-sm text-zinc-900 placeholder:text-stone-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-stone-700 dark:bg-stone-800 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
+                      />
 
-                  <div className="flex items-center gap-3">
-                    {/* Respectful Wrap Up Action */}
-                    <button
-                      type="button"
-                      onClick={handleWrapUpTopic}
-                      disabled={isLoading}
-                      className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 font-semibold text-xs flex items-center gap-1"
-                    >
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Wrap Up & Save Evidence</span>
-                    </button>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-stone-400">
+                          Press <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Enter ↵</kbd> to submit, <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Shift+Enter</kbd> for newline
+                        </span>
 
-                    <span className="text-stone-300 dark:text-stone-700">•</span>
-
-                    {/* Rare skip option */}
-                    <button
-                      type="button"
-                      onClick={handlePreFillSkip}
-                      disabled={isLoading}
-                      className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-400 hover:text-rose-600 text-[11px]"
-                    >
-                      Skip topic
-                    </button>
+                        <button
+                          type="submit"
+                          disabled={isLoading || !answerInput.trim()}
+                          className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-stone-200 disabled:text-stone-500 disabled:border-stone-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-stone-800 dark:disabled:text-stone-400 transition-all"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Evaluating Response...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Send Response</span>
+                              <Send className="h-3.5 w-3.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 </div>
 
-                <form onSubmit={handleSend} className="space-y-2">
-                  <textarea
-                    rows={3}
-                    value={answerInput}
-                    onChange={(e) => setAnswerInput(e.target.value)}
-                    placeholder="Describe your hands-on experience, responsibilities, or specific project outcomes..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    className="w-full rounded-lg border border-stone-300 bg-white p-3 text-sm text-zinc-900 placeholder:text-stone-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-stone-700 dark:bg-stone-800 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
-                  />
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-stone-400">
-                      Press <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Enter ↵</kbd> to submit, <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Shift+Enter</kbd> for newline
-                    </span>
-
-                    <button
-                      type="submit"
-                      disabled={isLoading || !answerInput.trim()}
-                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-stone-200 disabled:text-stone-500 disabled:border-stone-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-stone-800 dark:disabled:text-stone-400 transition-all"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Evaluating Response...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Send Response</span>
-                          <Send className="h-3.5 w-3.5" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                {/* Right Column: Live Evidence Form */}
+                <div className="lg:col-span-5 flex flex-col">
+                  {onSaveMetadata && onResetTopicExperience ? (
+                    <LiveEvidenceForm
+                      metadata={activeExperienceMetadata || null}
+                      isLoading={isLoading}
+                      highlightErrors={highlightFormErrors}
+                      onSaveMetadata={onSaveMetadata}
+                      onResetTopicExperience={onResetTopicExperience}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : (

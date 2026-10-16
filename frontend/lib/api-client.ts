@@ -95,13 +95,17 @@ export async function uploadResume(
 export async function sendChatMessage(
   sessionId: string,
   userMessage: string,
-  action?: "chat" | "conclude" | "skip"
+  action?: "chat" | "conclude" | "skip" | "form_update" | "reset_topic",
+  formDataPayload?: Record<string, any> | null
 ): Promise<ChatResponse> {
   const formData = new FormData();
   formData.append("session_id", sessionId);
   formData.append("user_message", userMessage);
   if (action) {
     formData.append("action", action);
+  }
+  if (formDataPayload) {
+    formData.append("form_data", JSON.stringify(formDataPayload));
   }
 
   const authHeaders = await getAuthHeaders();
@@ -115,6 +119,39 @@ export async function sendChatMessage(
 
   if (!response.ok) {
     let errorDetail = "Failed to send message to resume agent";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  return response.json();
+}
+
+export async function resetTopicChat(
+  sessionId: string,
+  newExperienceType?: string
+): Promise<ChatResponse> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  if (newExperienceType) {
+    formData.append("new_experience_type", newExperienceType);
+  }
+
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/reset-topic-chat`, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to reset topic chat";
     try {
       const errJson = await response.json();
       errorDetail = errJson.detail || errorDetail;

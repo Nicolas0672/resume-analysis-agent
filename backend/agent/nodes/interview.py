@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from langchain_openai import ChatOpenAI
 
 from agent.model import EvidenceWithDetails, InvestigateOutput
@@ -6,7 +7,32 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, RemoveMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-# if user has 2 experience within a message window, it should be viewed as 2 seperate objects
+
+def validate_experience_metadata(metadata: dict | None) -> tuple[bool, str]:
+    if not metadata or not metadata.get("experience_type"):
+        return False, "Please select an experience type (Work Experience, Project, Leadership, or Other) and fill in the required fields before saving evidence."
+    
+    exp_type = metadata.get("experience_type")
+    if exp_type == "work_experience":
+        if not metadata.get("company") or not str(metadata.get("company")).strip():
+            return False, "Company Name is required for Work Experience."
+        if not metadata.get("job_title") or not str(metadata.get("job_title")).strip():
+            return False, "Job Title is required for Work Experience."
+    elif exp_type == "project":
+        if not metadata.get("project_name") or not str(metadata.get("project_name")).strip():
+            return False, "Project Name is required for Project Experience."
+        if not metadata.get("role") or not str(metadata.get("role")).strip():
+            return False, "Your Role is required for Project Experience."
+    elif exp_type == "leadership":
+        if not metadata.get("leadership_title") or not str(metadata.get("leadership_title")).strip():
+            return False, "Organization / Activity Title is required for Leadership."
+        if not metadata.get("position") or not str(metadata.get("position")).strip():
+            return False, "Position is required for Leadership."
+    elif exp_type == "other":
+        if not metadata.get("other_title") or not str(metadata.get("other_title")).strip():
+            return False, "Experience Title is required for Other Experience."
+    return True, ""
+
 
 def reset_investigation(state: AgentState):
     return {
@@ -15,6 +41,7 @@ def reset_investigation(state: AgentState):
             for message in state["investigation_messages"]
         ],
         "human_investigate_action": "chat",
+        "active_experience_metadata": None,
     }
 
 async def investigate_candidate(state: AgentState):
@@ -135,6 +162,7 @@ Ask EXACTLY ONE question at a time. The candidate controls when to conclude or s
      """)
     ])
 
+    active_metadata = state.get("active_experience_metadata") or {}
     action = state.get("human_investigate_action", "chat")
 
     # Case 1: Human explicitly skipped this topic
@@ -145,18 +173,89 @@ Ask EXACTLY ONE question at a time. The candidate controls when to conclude or s
             ],
             "need_more_info": False,
             "completed_topic_ids": [topic_id],
+            "active_experience_metadata": None,
         }
 
-    # Case 2: Human explicitly concluded / wrapped up this topic
+    # Case 2: Human reset topic to switch experience type
+    if action == "reset_topic":
+        reset_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+"""You are an evidence-focused interview agent. The candidate has decided to explore a new experience for this job requirement.
+Job requirement: {job_requirement}
+New experience metadata: {active_experience_metadata}
+
+Start fresh by asking EXACTLY ONE friendly, conversational opening question to learn about this experience (e.g. what the project/role was and what their primary contribution was regarding this requirement).
+Do not reference past conversation or past experiences.
+"""),
+            ("human", "Topic: {topic}. Objective: {objective}. What is your opening question?")
+        ])
+        model = ChatOpenAI(model="gpt-4o", temperature=0)
+        llm_structured = model.with_structured_output(InvestigateOutput)
+        response = await llm_structured.ainvoke(reset_prompt.format_messages(
+            job_requirement=selected.job_requirement,
+            active_experience_metadata=active_metadata,
+            topic=selected.topic,
+            objective=selected.objective,
+        ))
+        remove_ops = [RemoveMessage(id=m.id) for m in state.get("investigation_messages", []) if hasattr(m, "id")]
+        return {
+            "investigation_messages": [
+                *remove_ops,
+                AIMessage(content=response.user_message),
+            ],
+            "need_more_info": True,
+            "active_experience_metadata": active_metadata,
+        }
+
+    # Case 3: Human updated form fields directly
+    if action == "form_update":
+        update_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+"""You are an evidence-focused interview agent. The candidate just directly updated or verified their experience metadata in the form.
+Current verified metadata: {active_experience_metadata}
+Job requirement: {job_requirement}
+Objective: {objective}
+Conversation history: {conversation_history}
+
+Your task:
+1. Briefly and warmly acknowledge the updated details in 1 sentence.
+2. Ask the single next high-value probing question regarding concrete actions, ownership, technical methods, or impact needed for this requirement.
+Ask EXACTLY ONE question.
+"""),
+            ("human", "Candidate updated form details. Please acknowledge and ask the next question.")
+        ])
+        model = ChatOpenAI(model="gpt-4o", temperature=0)
+        llm_structured = model.with_structured_output(InvestigateOutput)
+        response = await llm_structured.ainvoke(update_prompt.format_messages(
+            active_experience_metadata=active_metadata,
+            job_requirement=selected.job_requirement,
+            objective=selected.objective,
+            conversation_history=conversation_history,
+        ))
+        return {
+            "investigation_messages": [AIMessage(content=response.user_message)],
+            "need_more_info": True,
+            "active_experience_metadata": active_metadata,
+        }
+
+    # Case 4: Human explicitly concluded / wrapped up this topic
     if action == "conclude":
+        # Enforce required metadata validation before finalizing evidence
+        is_valid, err_msg = validate_experience_metadata(active_metadata)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=err_msg)
+
         conclude_system_prompt = """
 You are an evidence synthesis agent. The candidate has concluded this investigation topic.
 
+The established experience metadata is: {active_experience_metadata}
+
 Your task is to:
-1. Thoroughly review the conversation history and all accumulated candidate statements for this topic.
-2. Extract all truthful, verified evidence discovered during the conversation into the Evidence schema (including project/company name, actions, ownership, tools/technologies, metrics, scale, and impact).
-3. If no relevant evidence was found or the candidate lacked experience, set evidence to None.
-4. Provide a warm, concise user_message summarizing what was established and confirming that this topic is concluded.
+1. Thoroughly review the conversation history and all candidate statements for this topic.
+2. Extract all truthful, verified evidence discovered during the conversation into the Evidence schema (including company/project name, actions, ownership, tools/technologies, metrics, scale, and impact).
+3. Ensure company, job_title, project_name, and duration reflect the established metadata.
+4. If no relevant evidence was found or the candidate lacked experience, set evidence to None.
+5. Provide a warm, concise user_message summarizing what was established and confirming that this topic is concluded.
 DO NOT ask any questions. Do not ask for more information.
 """
         conclude_prompt = ChatPromptTemplate.from_messages([
@@ -179,10 +278,24 @@ DO NOT ask any questions. Do not ask for more information.
         )
         llm_structured = model.with_structured_output(InvestigateOutput)
         response = await llm_structured.ainvoke(conclude_prompt.format_messages(
+            active_experience_metadata=active_metadata,
             topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
             objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history, relevant_experience_from_resume=relevant_experience_from_resume,
             evidence_with_details=evidence_with_details
         ))
+
+        # Backfill metadata into evidence if LLM omitted specific identity fields
+        if response.evidence:
+            if active_metadata.get("company") and not response.evidence.company:
+                response.evidence.company = active_metadata.get("company")
+            if active_metadata.get("job_title") and not response.evidence.job_title:
+                response.evidence.job_title = active_metadata.get("job_title")
+            if active_metadata.get("project_name") and not response.evidence.project_name:
+                response.evidence.project_name = active_metadata.get("project_name")
+            if active_metadata.get("duration") and not response.evidence.duration:
+                response.evidence.duration = active_metadata.get("duration")
+            if active_metadata.get("location") and not response.evidence.job_location:
+                response.evidence.job_location = active_metadata.get("location")
 
         updated_details = EvidenceWithDetails(
             job_requirement=selected.job_requirement, topic_id=selected.topic_id, evidence=response.evidence
@@ -192,23 +305,62 @@ DO NOT ask any questions. Do not ask for more information.
             "need_more_info": False,
             "evidence_with_details": [updated_details],
             "completed_topic_ids": [topic_id],
+            "active_experience_metadata": None,
         }
 
-    # Case 3: Human sent an answer to continue the conversation
+    # Case 5: Human sent an answer to continue the conversation
+    prompt = ChatPromptTemplate.from_messages([
+("system",
+"""
+You are an evidence-focused interview agent. Investigate the current topic only until there is sufficient, truthful evidence to support strong resume bullet points.
+
+The candidate's `evidence_with_details` is an accumulated evidence bank from previous investigations. Treat it as established candidate knowledge.
+Current active experience metadata: {active_experience_metadata}
+
+### Core rules & Guardrails:
+1. SINGLE EXPERIENCE FOCUS: Only explore ONE experience entity per topic (one job, one project, etc.).
+2. DISAMBIGUATION: If the candidate mentions more than one distinct experience in their answer (e.g. both a job at Uber AND a personal project), DO NOT combine them. Pick the single experience that best addresses the requirement, populate experience_metadata with that experience, and explicitly instruct the candidate to focus on that single experience.
+3. IDENTITY GAPS: If the experience type is known but required fields (such as Company Name or Job Title for Work Experience, or Project Name or Role for Project) are unknown, prioritize asking for those identity details in your next question.
+4. METADATA EXTRACTION: Populate `experience_metadata` with any newly established identity details (company, role, title, dates, location).
+5. ONE QUESTION: Ask EXACTLY ONE thoughtful, conversational question at a time.
+"""),
+    ("human", 
+     """conversation history: {conversation_history}, 
+        topic: {topic}, 
+        reasoning for investigation: {reason}, 
+        any relevant experience: {relevant_experience}
+        objective: {objective}  
+        job requirement for context: {job_requirement}
+        relevant experience from resume: {relevant_experience_from_resume}
+        evidence_with_details: {evidence_with_details}
+     """)
+    ])
+
     model = ChatOpenAI(
         model="gpt-4o",
         temperature=0
     )
     llm_structured = model.with_structured_output(InvestigateOutput)
     response = await llm_structured.ainvoke(prompt.format_messages(
+        active_experience_metadata=active_metadata,
         topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
         objective=selected.objective, job_requirement=selected.job_requirement, conversation_history=conversation_history, relevant_experience_from_resume=relevant_experience_from_resume,
         evidence_with_details=evidence_with_details
     ))
 
+    # Merge newly detected metadata into active_metadata
+    merged_metadata = dict(active_metadata) if active_metadata else {}
+    if response.experience_metadata:
+        new_data = response.experience_metadata.model_dump(exclude_none=True)
+        # If experience_type is already locked, prevent LLM from changing it mid-investigation
+        if merged_metadata.get("experience_type"):
+            new_data.pop("experience_type", None)
+        merged_metadata.update(new_data)
+
     return {
         "investigation_messages": [AIMessage(content=response.user_message)],
         "need_more_info": True,
+        "active_experience_metadata": merged_metadata or None,
     }
     
 

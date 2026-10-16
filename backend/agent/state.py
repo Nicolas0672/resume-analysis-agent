@@ -42,6 +42,7 @@ class AgentState(TypedDict):
     feedbacks: Feedbacks
 
     iteration_loop: int
+    active_experience_metadata: Optional[dict]
 
     
 

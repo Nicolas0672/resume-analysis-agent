@@ -143,10 +143,68 @@ class Evidence(BaseModel):
         )
     )
 
+class ExperienceMetadata(BaseModel):
+    experience_type: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
+        default=None,
+        description="The category of the single experience being explored: 'work_experience', 'project', 'leadership', or 'other'."
+    )
+    # Work Experience
+    company: Optional[str] = Field(
+        default=None,
+        description="Company / employer name (REQUIRED if work_experience)."
+    )
+    job_title: Optional[str] = Field(
+        default=None,
+        description="Role or job title (REQUIRED if work_experience)."
+    )
+    # Project
+    project_name: Optional[str] = Field(
+        default=None,
+        description="Name of the project (REQUIRED if project)."
+    )
+    role: Optional[str] = Field(
+        default=None,
+        description="Candidate's role in the project e.g. Lead Developer, Creator (REQUIRED if project)."
+    )
+    # Leadership
+    leadership_title: Optional[str] = Field(
+        default=None,
+        description="Organization, club, or initiative name (REQUIRED if leadership)."
+    )
+    position: Optional[str] = Field(
+        default=None,
+        description="Position held e.g. President, Chair (REQUIRED if leadership)."
+    )
+    # Other
+    other_title: Optional[str] = Field(
+        default=None,
+        description="Title or concise name of the activity/experience (REQUIRED if other)."
+    )
+    other_organization: Optional[str] = None
+    other_role: Optional[str] = None
+    other_notes: Optional[str] = None
+    # Shared optional fields
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates (e.g. 'June 2022 - Aug 2023', '2024')."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+    technologies: Optional[list[str]] = Field(
+        default=None,
+        description="Key technologies or tools explicitly mentioned for this experience."
+    )
+
 class InvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
     user_message: str = Field(description="Message to the user asking for more details/clarification or summarizing established experience")
-    evidence: Evidence | None
+    experience_metadata: Optional[ExperienceMetadata] = Field(
+        default=None,
+        description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
+    )
+    evidence: Evidence | None = None
 
 # Not created from LLM. Manually created from evidence extracted
 class EvidenceWithDetails(BaseModel):
