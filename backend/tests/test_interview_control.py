@@ -8,13 +8,19 @@ os.environ["OPENAI_API_KEY"] = "test-key"
 from fastapi import HTTPException
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.model import (
+    ALLOWED_KEYS_PER_TYPE,
     Evidence,
     EvidenceWithDetails,
     ExperienceMetadata,
     InterviewDetails,
     InterviewPlan,
     InvestigateOutput,
+    LeadershipMetadata,
+    OtherMetadata,
+    ProjectMetadata,
     ResumeReference,
+    WorkExperienceMetadata,
+    WorkInvestigateOutput,
 )
 from agent.nodes.human_decision import human_after_interview_planner, human_investigate_chat
 from agent.nodes.interview import investigate_candidate, reset_investigation, validate_experience_metadata
@@ -312,3 +318,127 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         mock_graph.ainvoke.assert_called_once()
         cmd = mock_graph.ainvoke.call_args[0][0]
         self.assertEqual(cmd.resume, {"action": "form_update", "message": "I handled deployment", "form_data": {"company": "Uber"}})
+
+    def test_scoped_metadata_schemas_exclude_foreign_fields(self):
+        """Ensure Work schema excludes project/leadership fields, and Project schema excludes company/leadership fields."""
+        work_props = WorkExperienceMetadata.model_json_schema().get("properties", {})
+        self.assertIn("company", work_props)
+        self.assertIn("job_title", work_props)
+        self.assertNotIn("project_name", work_props)
+        self.assertNotIn("leadership_title", work_props)
+
+        project_props = ProjectMetadata.model_json_schema().get("properties", {})
+        self.assertIn("project_name", project_props)
+        self.assertIn("role", project_props)
+        self.assertNotIn("company", project_props)
+        self.assertNotIn("leadership_title", project_props)
+
+        leadership_props = LeadershipMetadata.model_json_schema().get("properties", {})
+        self.assertIn("leadership_title", leadership_props)
+        self.assertIn("position", leadership_props)
+        self.assertNotIn("company", leadership_props)
+        self.assertNotIn("project_name", leadership_props)
+
+    async def test_investigate_candidate_chat_with_locked_type_applies_whitelist(self):
+        """Ensure when experience_type is locked to work_experience, LLM only updates work fields and strips foreign keys."""
+        topic = InterviewDetails(
+            topic_id="topic-work-1",
+            topic="Backend Architecture",
+            priority="High",
+            reason="Core requirement",
+            objective="Evaluate distributed systems work",
+            job_requirement="Microservices and Kubernetes",
+            relevant_experience=["Kubernetes at Work"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Metrics unknown",
+        )
+        state = {
+            "topic_id_selection": "topic-work-1",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="At Netflix, I migrated 20 services to K8s.")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": {
+                "experience_type": "work_experience",
+                "company": "Netflix",
+            },
+        }
+
+        # Mock LLM returning WorkInvestigateOutput with job_title
+        mock_output = WorkInvestigateOutput(
+            user_message="How did you handle rollback strategies during the migration?",
+            experience_metadata=WorkExperienceMetadata(
+                company="Netflix",
+                job_title="Senior Platform Engineer",
+                duration="2022 - 2024",
+            ),
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+        self.assertTrue(res["need_more_info"])
+        metadata = res["active_experience_metadata"]
+        self.assertEqual(metadata["experience_type"], "work_experience")
+        self.assertEqual(metadata["company"], "Netflix")
+        self.assertEqual(metadata["job_title"], "Senior Platform Engineer")
+        self.assertEqual(metadata["duration"], "2022 - 2024")
+        self.assertNotIn("project_name", metadata)
+        self.assertNotIn("leadership_title", metadata)
+
+    async def test_investigate_candidate_chat_turn1_auto_classification(self):
+        """Ensure on Turn 1 when experience_type is None, LLM detects experience_type and locks it."""
+        topic = InterviewDetails(
+            topic_id="topic-turn1",
+            topic="Open Source",
+            priority="Medium",
+            reason="Bonus",
+            objective="Assess open source projects",
+            job_requirement="Rust open source contributions",
+            relevant_experience=[],
+            relevant_experience_from_resume=None,
+            evidence_gap="Everything unknown",
+        )
+        state = {
+            "topic_id_selection": "topic-turn1",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="I created a Rust open-source library called FastQueue.")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": None,
+        }
+
+        mock_output = InvestigateOutput(
+            user_message="What was your architectural approach in FastQueue?",
+            experience_metadata=ExperienceMetadata(
+                experience_type="project",
+                project_name="FastQueue",
+                role="Creator & Maintainer",
+            ),
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+        self.assertTrue(res["need_more_info"])
+        metadata = res["active_experience_metadata"]
+        self.assertEqual(metadata["experience_type"], "project")
+        self.assertEqual(metadata["project_name"], "FastQueue")
+        self.assertEqual(metadata["role"], "Creator & Maintainer")
+        # Ensure work fields were not leaked
+        self.assertNotIn("company", metadata)
+        self.assertNotIn("job_title", metadata)

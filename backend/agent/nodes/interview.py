@@ -1,7 +1,12 @@
 from fastapi import HTTPException
 from langchain_openai import ChatOpenAI
 
-from agent.model import EvidenceWithDetails, InvestigateOutput
+from agent.model import (
+    ALLOWED_KEYS_PER_TYPE,
+    EvidenceWithDetails,
+    InvestigateOutput,
+    SCOPED_INVESTIGATE_OUTPUT_MAP,
+)
 from agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, RemoveMessage
@@ -69,99 +74,6 @@ async def investigate_candidate(state: AgentState):
             if entry:
                 relevant_experience_from_resume.append(entry)
 
-    prompt = ChatPromptTemplate.from_messages([
-("system",
-"""
-You are an evidence-focused interview agent. Investigate the current topic only until there is sufficient, truthful evidence to support strong resume bullet points.
-
-The candidate's `evidence_with_details` is an accumulated evidence bank from previous investigations. Treat it as established candidate knowledge and use it alongside the current conversation to determine what is already known and what evidence is still missing.
-
-### Core behavior
-
-Your job is not to interrogate the candidate about the job requirement.
-
-Your job is to reason across the job requirement, investigation objective, candidate's resume, previous conversation, and accumulated evidence to discover where the candidate may have relevant evidence that has not yet been surfaced.
-
-Once determined that the candidate has provided sufficient evidence, mention that Candidate should click on "Wrap Up And Save Evidence" to concluyde the investigation.
-Before asking each question:
-
-1. Understand what the job requirement is actually trying to evaluate.
-2. Review all candidate evidence for direct, adjacent, or transferable experiences that could support it.
-3. Identify the single most valuable unresolved evidence gap.
-4. Determine the most natural connection between the candidate's known experience and the job requirement.
-5. Ask one conversational question that uses that connection to uncover the missing evidence.
-
-Do the mapping between the candidate and the job yourself. Do not require the candidate to already know how their experience relates to the requirement.
-
-### Question behavior
-
-Questions should feel like a thoughtful conversation about the candidate's experience, not a checklist or interrogation.
-
-Prefer:
-* Connecting the employer's underlying need to experiences the candidate has already demonstrated.
-* Broadening the search when the requirement is subjective or domain-specific.
-* Giving the candidate several reasonable contexts to search their memory, without suggesting that they have done any of them.
-* Referencing specific candidate experiences when they provide a natural starting point.
-* Asking about concrete experiences, decisions, motivations, actions, or outcomes rather than asking whether the candidate possesses a trait.
-
-For subjective requirements such as passion, interest, motivation, or mission alignment, do not ask the candidate to self-identify as passionate. Explore experiences, projects, choices, involvement, or motivations from which that interest can reasonably be inferred.
-
-For example, if a job values transportation, community, or sustainability and the candidate has no explicit transportation experience, do not simply ask:
-"Do you have transportation experience?"
-
-Instead, reason about adjacent evidence and broaden the search:
-"Have you done anything through school, work, personal projects, volunteering, or your community that involved helping people, improving how people get around, reducing waste or resource use, or contributing to a community? Tell me about anything that comes to mind, even if it doesn't seem directly related."
-
-Do not imply that an experience exists. The candidate must establish it.
-
-### Evidence discovery
-
-Prioritize discovering:
-* Direct evidence relevant to the job requirement.
-* Transferable evidence from adjacent experiences.
-* Specific actions and ownership.
-* Technical approach when relevant.
-* Challenges and decisions.
-* Scope and scale.
-* Concrete outcomes and impact.
-* Genuine motivations or interests when relevant.
-* Missing identity details when a relevant work experience or project is discovered.
-
-Do not pressure the candidate for metrics. Only record metrics explicitly provided.
-
-Keep evidence scoped to the experience from which it originated. Never combine unrelated experiences because they share a technology, skill, or theme.
-
-### Investigation loop
-
-After each candidate response, reassess the entire available evidence.
-
-Do not follow a predetermined sequence of questions.
-
-If the response:
-* resolves the objective, stop;
-* partially resolves it, investigate the highest-value remaining uncertainty;
-* reveals a stronger or more relevant experience, follow that experience;
-* reveals that no meaningful evidence exists, stop;
-* answers the question but creates a more valuable evidence gap, pursue the new gap.
-
-Ask EXACTLY ONE question at a time.
-
-### Question behavior
-
-Ask EXACTLY ONE question at a time. The candidate controls when to conclude or skip the investigation. Your role during active chat is to ask one thoughtful, conversational question to explore relevant evidence that has not yet been surfaced.
-"""),
-    ("human", 
-     """conversation history: {conversation_history}, 
-        topic: {topic}, 
-        reasoning for investigation: {reason}, 
-        any relevant experience: {relevant_experience}
-        objective: {objective}  
-        job requirement for context: {job_requirement}
-        relevant experience from resume: {relevant_experience_from_resume}
-        evidence_with_details: {evidence_with_details}
-     """)
-    ])
-
     active_metadata = state.get("active_experience_metadata") or {}
     action = state.get("human_investigate_action", "chat")
 
@@ -190,7 +102,8 @@ Do not reference past conversation or past experiences.
             ("human", "Topic: {topic}. Objective: {objective}. What is your opening question?")
         ])
         model = ChatOpenAI(model="gpt-4o", temperature=0)
-        llm_structured = model.with_structured_output(InvestigateOutput)
+        reset_schema = SCOPED_INVESTIGATE_OUTPUT_MAP.get(active_metadata.get("experience_type"), InvestigateOutput)
+        llm_structured = model.with_structured_output(reset_schema)
         response = await llm_structured.ainvoke(reset_prompt.format_messages(
             job_requirement=selected.job_requirement,
             active_experience_metadata=active_metadata,
@@ -225,7 +138,8 @@ Ask EXACTLY ONE question.
             ("human", "Candidate updated form details. Please acknowledge and ask the next question.")
         ])
         model = ChatOpenAI(model="gpt-4o", temperature=0)
-        llm_structured = model.with_structured_output(InvestigateOutput)
+        update_schema = SCOPED_INVESTIGATE_OUTPUT_MAP.get(active_metadata.get("experience_type"), InvestigateOutput)
+        llm_structured = model.with_structured_output(update_schema)
         response = await llm_structured.ainvoke(update_prompt.format_messages(
             active_experience_metadata=active_metadata,
             job_requirement=selected.job_requirement,
@@ -309,20 +223,74 @@ DO NOT ask any questions. Do not ask for more information.
         }
 
     # Case 5: Human sent an answer to continue the conversation
+    active_type = active_metadata.get("experience_type")
+    output_schema = SCOPED_INVESTIGATE_OUTPUT_MAP.get(active_type, InvestigateOutput)
+
+    if active_type:
+        type_display = active_type.replace("_", " ").title()
+        entity_name = (
+            active_metadata.get("company")
+            or active_metadata.get("project_name")
+            or active_metadata.get("leadership_title")
+            or active_metadata.get("other_title")
+            or f"this {type_display}"
+        )
+        scoping_instructions = f"""
+### Category Focus & Tab Redirection:
+- The current investigation is strictly focused on {type_display}: "{entity_name}".
+- Keep all probing questions focused strictly on concrete actions, ownership, technologies, and metrics for this {type_display}.
+- If the candidate mentions an experience belonging to a different category (e.g. they describe a personal project or student activity while this topic is focused on Work Experience), DO NOT combine them and DO NOT probe into that other category.
+- Instead, politely acknowledge it and instruct the candidate that they can switch to the corresponding tab (Work Experience, Project, Leadership, or Other) on the right to focus on that experience instead.
+- Populate `experience_metadata` ONLY with identity fields relevant to this {type_display}.
+"""
+    else:
+        scoping_instructions = """
+### Initial Experience Detection:
+- The experience category for this requirement has not been determined yet.
+- From the candidate's response, determine whether this experience is best categorized as 'work_experience', 'project', 'leadership', or 'other', and set experience_type accordingly in experience_metadata.
+- Once determined, focus exclusively on that single experience.
+"""
+
     prompt = ChatPromptTemplate.from_messages([
 ("system",
-"""
-You are an evidence-focused interview agent. Investigate the current topic only until there is sufficient, truthful evidence to support strong resume bullet points.
+f"""
+You are an expert technical interviewer and resume strategist. Your single objective is to guide the candidate to uncover high-impact evidence for strong, compelling resume bullet points tailored to the job requirement.
 
-The candidate's `evidence_with_details` is an accumulated evidence bank from previous investigations. Treat it as established candidate knowledge.
-Current active experience metadata: {active_experience_metadata}
+Current active experience metadata: {{active_experience_metadata}}
+Established evidence bank: {{evidence_with_details}}
 
-### Core rules & Guardrails:
-1. SINGLE EXPERIENCE FOCUS: Only explore ONE experience entity per topic (one job, one project, etc.).
-2. DISAMBIGUATION: If the candidate mentions more than one distinct experience in their answer (e.g. both a job at Uber AND a personal project), DO NOT combine them. Pick the single experience that best addresses the requirement, populate experience_metadata with that experience, and explicitly instruct the candidate to focus on that single experience.
-3. IDENTITY GAPS: If the experience type is known but required fields (such as Company Name or Job Title for Work Experience, or Project Name or Role for Project) are unknown, prioritize asking for those identity details in your next question.
-4. METADATA EXTRACTION: Populate `experience_metadata` with any newly established identity details (company, role, title, dates, location).
-5. ONE QUESTION: Ask EXACTLY ONE thoughtful, conversational question at a time.
+### The 4 Pillars of Resume Evidence:
+Every strong resume bullet point needs a balance of:
+1. PROBLEM & CONTEXT: What was the technical challenge, scale, or bottleneck? (e.g. high latency, token costs, 500 concurrent users).
+2. ARCHITECTURE & TECHNICAL ACTION: What key architectural decisions, patterns, or tools did the candidate build or implement? (e.g. FastAPI async pipeline, semantic chunking, vector retrieval).
+3. TRADE-OFFS & CRITICAL THINKING: Why this approach over alternatives? What was a key obstacle or trade-off they navigated?
+4. MEASURABLE IMPACT & OUTCOMES: What was the quantifiable result or benefit? (e.g. p95 latency cut by 40%, token consumption halved, reliable uptime).
+
+### How to Guide the Candidate (Gap-Driven Interviewing):
+- Look at the `conversation_history`, `active_experience_metadata`, and `relevant_experience_from_resume`.
+- Identify what is ALREADY ESTABLISHED vs WHAT IS STILL MISSING to craft stellar resume bullets.
+- Actively guide the candidate toward the missing pillar (especially Measurable Impact, Scale, or Architectural Trade-offs).
+- If the candidate answers with high-level theory, prompt for concrete scale or architectural specifics.
+- If the candidate answers with low-level implementation, lift them up to the impact, trade-offs, and outcomes.
+
+### Crucial Conversational Guardrails:
+1. BREADTH OVER TRIVIA (NO TUNNEL VISION):
+   - NEVER drill down into routine boilerplate code, standard libraries, or trivial setup details (e.g. NEVER ask how Python standard logging was configured, how libraries were imported, or how cosine similarity formulas work).
+   - Once a technical choice is explained, do NOT keep asking "how did you implement that". Instead, PIVOT to Trade-offs or Measurable Impact.
+2. NATURAL & ENGAGING DIALOGUE (NO ROBOTIC ECHOES):
+   - NEVER start questions with formulaic, repetitive echoes like "You've mentioned...", "You described...", or "You've shared...".
+   - Speak naturally like a senior engineering manager or staff engineer having a collaborative whiteboard session: direct, curious, and encouraging.
+3. SINGLE EXPERIENCE FOCUS & DISAMBIGUATION:
+   - Only explore ONE experience entity per topic.
+   - If the candidate mentions more than one distinct experience in their answer, DO NOT combine them. Pick the single experience that best addresses the requirement, and instruct them to focus on that entity.
+4. IDENTITY GAPS:
+   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, prioritize asking for those identity details early.
+5. ONE QUESTION AT A TIME:
+   - Ask EXACTLY ONE thoughtful, high-leverage question at a time.
+6. SUFFICIENCY & GENTLE WRAP-UP:
+   - Once the conversation covers the problem, technical implementation, and metrics or trade-offs with enough substance to craft 2-3 stellar resume bullet points, DO NOT keep interrogating.
+   - Warmly summarize the strong evidence gathered and let the candidate know they have great material and can click "Wrap Up & Save Evidence" whenever they are ready, or share any final highlights.
+{scoping_instructions}
 """),
     ("human", 
      """conversation history: {conversation_history}, 
@@ -340,7 +308,7 @@ Current active experience metadata: {active_experience_metadata}
         model="gpt-4o",
         temperature=0
     )
-    llm_structured = model.with_structured_output(InvestigateOutput)
+    llm_structured = model.with_structured_output(output_schema)
     response = await llm_structured.ainvoke(prompt.format_messages(
         active_experience_metadata=active_metadata,
         topic=selected.topic, reason=selected.reason, relevant_experience=selected.relevant_experience,
@@ -348,14 +316,22 @@ Current active experience metadata: {active_experience_metadata}
         evidence_with_details=evidence_with_details
     ))
 
-    # Merge newly detected metadata into active_metadata
+    # Merge newly detected metadata into active_metadata with strict whitelist sanitization
     merged_metadata = dict(active_metadata) if active_metadata else {}
     if response.experience_metadata:
         new_data = response.experience_metadata.model_dump(exclude_none=True)
         # If experience_type is already locked, prevent LLM from changing it mid-investigation
         if merged_metadata.get("experience_type"):
             new_data.pop("experience_type", None)
-        merged_metadata.update(new_data)
+            current_type = merged_metadata["experience_type"]
+        else:
+            current_type = new_data.get("experience_type") or "work_experience"
+            new_data["experience_type"] = current_type
+
+        # Whitelist filter: discard any keys that do not belong to current_type
+        allowed_keys = ALLOWED_KEYS_PER_TYPE.get(current_type, set())
+        sanitized_data = {k: v for k, v in new_data.items() if k in allowed_keys}
+        merged_metadata.update(sanitized_data)
 
     return {
         "investigation_messages": [AIMessage(content=response.user_message)],

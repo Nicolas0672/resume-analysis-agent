@@ -143,42 +143,121 @@ class Evidence(BaseModel):
         )
     )
 
-class ExperienceMetadata(BaseModel):
+class WorkExperienceMetadata(BaseModel):
+    experience_type: Literal["work_experience"] = Field(
+        default="work_experience",
+        description="Must be 'work_experience'."
+    )
+    company: str = Field(
+        default=None,
+        description="Company / employer name (REQUIRED for work experience)."
+    )
+    job_title: str = Field(
+        default=None,
+        description="Role or job title (REQUIRED for work experience)."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates (e.g. 'June 2022 - Aug 2023', '2024')."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+
+class ProjectMetadata(BaseModel):
+    experience_type: Literal["project"] = Field(
+        default="project",
+        description="Must be 'project'."
+    )
+    project_name: str = Field(
+        default=None,
+        description="Name of the project (REQUIRED for project)."
+    )
+    role: Optional[str] = Field(
+        default=None,
+        description="Candidate's role in the project e.g. Lead Developer, Creator."
+    )
+    technologies: Optional[list[str]] = Field(
+        default=None,
+        description="Key technologies or tools explicitly mentioned for this project."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or duration (e.g. 'Fall 2023', '3 months')."
+    )
+
+class LeadershipMetadata(BaseModel):
+    experience_type: Literal["leadership"] = Field(
+        default="leadership",
+        description="Must be 'leadership'."
+    )
+    leadership_title: str = Field(
+        default=None,
+        description="Organization, club, or initiative name (REQUIRED for leadership)."
+    )
+    position: str = Field(
+        default=None,
+        description="Position held e.g. President, Chair (REQUIRED for leadership)."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+
+class OtherMetadata(BaseModel):
+    experience_type: Literal["other"] = Field(
+        default="other",
+        description="Must be 'other'."
+    )
+    other_title: str = Field(
+        default=None,
+        description="Title or concise name of the activity/experience (REQUIRED for other)."
+    )
+    other_organization: Optional[str] = None
+    other_role: Optional[str] = None
+    other_notes: Optional[str] = None
+
+class InitialExperienceMetadata(BaseModel):
     experience_type: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
         default=None,
-        description="The category of the single experience being explored: 'work_experience', 'project', 'leadership', or 'other'."
+        description="The category of the single experience being explored: 'work_experience', 'proj/ect', 'leadership', or 'other'."
     )
     # Work Experience
     company: Optional[str] = Field(
         default=None,
-        description="Company / employer name (REQUIRED if work_experience)."
+        description="Company / employer name (if work_experience)."
     )
     job_title: Optional[str] = Field(
         default=None,
-        description="Role or job title (REQUIRED if work_experience)."
+        description="Role or job title (if work_experience)."
     )
     # Project
     project_name: Optional[str] = Field(
         default=None,
-        description="Name of the project (REQUIRED if project)."
+        description="Name of the project (if project)."
     )
     role: Optional[str] = Field(
         default=None,
-        description="Candidate's role in the project e.g. Lead Developer, Creator (REQUIRED if project)."
+        description="Candidate's role in the project e.g. Lead Developer, Creator (if project)."
     )
     # Leadership
     leadership_title: Optional[str] = Field(
         default=None,
-        description="Organization, club, or initiative name (REQUIRED if leadership)."
+        description="Organization, club, or initiative name (if leadership)."
     )
     position: Optional[str] = Field(
         default=None,
-        description="Position held e.g. President, Chair (REQUIRED if leadership)."
+        description="Position held e.g. President, Chair (if leadership)."
     )
     # Other
     other_title: Optional[str] = Field(
         default=None,
-        description="Title or concise name of the activity/experience (REQUIRED if other)."
+        description="Title or concise name of the activity/experience (if other)."
     )
     other_organization: Optional[str] = None
     other_role: Optional[str] = None
@@ -197,6 +276,16 @@ class ExperienceMetadata(BaseModel):
         description="Key technologies or tools explicitly mentioned for this experience."
     )
 
+# Alias for backwards-compatibility and general typing
+ExperienceMetadata = InitialExperienceMetadata
+
+ALLOWED_KEYS_PER_TYPE = {
+    "work_experience": {"experience_type", "company", "job_title", "duration", "location"},
+    "project": {"experience_type", "project_name", "role", "technologies", "duration"},
+    "leadership": {"experience_type", "leadership_title", "position", "duration", "location"},
+    "other": {"experience_type", "other_title", "other_organization", "other_role", "other_notes"},
+}
+
 class InvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
     user_message: str = Field(description="Message to the user asking for more details/clarification or summarizing established experience")
@@ -205,6 +294,49 @@ class InvestigateOutput(BaseModel):
         description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
     )
     evidence: Evidence | None = None
+
+class WorkInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    experience_metadata: Optional[WorkExperienceMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this work experience (company, job_title, duration, location). Do NOT extract project or leadership fields."
+    )
+    evidence: Evidence | None = None
+
+class ProjectInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    experience_metadata: Optional[ProjectMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this project (project_name, role, technologies, duration). Do NOT extract work or leadership fields."
+    )
+    evidence: Evidence | None = None
+
+class LeadershipInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    experience_metadata: Optional[LeadershipMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this leadership experience (leadership_title, position, duration, location). Do NOT extract work or project fields."
+    )
+    evidence: Evidence | None = None
+
+class OtherInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    experience_metadata: Optional[OtherMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this other experience (other_title, other_organization, other_role, other_notes)."
+    )
+    evidence: Evidence | None = None
+
+SCOPED_INVESTIGATE_OUTPUT_MAP = {
+    "work_experience": WorkInvestigateOutput,
+    "project": ProjectInvestigateOutput,
+    "leadership": LeadershipInvestigateOutput,
+    "other": OtherInvestigateOutput,
+}
 
 # Not created from LLM. Manually created from evidence extracted
 class EvidenceWithDetails(BaseModel):
