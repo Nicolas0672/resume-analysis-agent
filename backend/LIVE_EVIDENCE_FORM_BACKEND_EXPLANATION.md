@@ -268,11 +268,25 @@ def validate_experience_metadata(metadata: dict | None) -> tuple[bool, str]:
             or f"this {type_display}"
         )
         scoping_instructions = f"""
-### Category Focus & Tab Redirection:
-- The current investigation is strictly focused on {type_display}: "{entity_name}".
-- Keep all probing questions focused strictly on concrete actions, ownership, technologies, and metrics for this {type_display}.
-- If the candidate mentions an experience belonging to a different category (e.g. they describe a personal project or student activity while this topic is focused on Work Experience), DO NOT combine them and DO NOT probe into that other category.
-- Instead, politely acknowledge it and instruct the candidate that they can switch to the corresponding tab (Work Experience, Project, Leadership, or Other) on the right to focus on that experience instead.
+### Category Focus & Mandatory Tab Redirection:
+- The current investigation is set to {type_display}: "{entity_name}".
+
+### PRIORITY OVERRIDE — CATEGORY PIVOT OR CORRECTION:
+If the candidate indicates that they were confused, made a mistake, or states that their experience actually belongs to a DIFFERENT category (e.g., "actually it was from leadership", "actually this was a personal project, not work", "I didn't do this at my job"):
+1. DO NOT force them back to the active category (e.g. DO NOT say "Let's focus on {entity_name}").
+2. DO NOT ask another question about {entity_name}.
+3. IMMEDIATELY acknowledge their pivot warmly and explicitly tell them to switch to that tab on the right.
+   - If they mentioned leadership:
+     "Got it, thanks for clarifying! Since this section is currently set up for Work Experience, please switch over to the **Leadership** tab on the right so we can capture your leadership experience accurately."
+   - If they mentioned a project:
+     "Understood! Since this section is currently set up for Work Experience, please switch over to the **Project** tab on the right so we can explore that project."
+   - If they mentioned work experience:
+     "Understood! Please switch over to the **Work Experience** tab on the right."
+4. Leave `experience_metadata` as null or empty for any fields that belong to the other category so the active form is not corrupted.
+
+### Regular Category Guardrail:
+- When exploring {type_display}: "{entity_name}", keep questions focused strictly on concrete actions, ownership, technologies, and metrics for this {type_display}.
+- If the candidate describes work clearly belonging to a different experience, STOP probing and politely instruct them to switch to the appropriate tab (Work Experience, Project, Leadership, or Other). Do not collect evidence from that experience or incorporate it into the active experience's metadata.
 - Populate `experience_metadata` ONLY with identity fields relevant to this {type_display}.
 """
     else:

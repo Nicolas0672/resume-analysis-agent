@@ -442,3 +442,51 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         # Ensure work fields were not leaked
         self.assertNotIn("company", metadata)
         self.assertNotIn("job_title", metadata)
+
+    async def test_investigate_candidate_chat_category_pivot_redirection(self):
+        """Ensure when candidate corrects that experience is from leadership, agent directs them to switch tabs."""
+        topic = InterviewDetails(
+            topic_id="topic-pivot-1",
+            topic="Communication & Leadership",
+            priority="High",
+            reason="Core requirement",
+            objective="Assess cross-functional leadership",
+            job_requirement="Cross-functional collaboration and leadership",
+            relevant_experience=["Microsoft"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specifics missing",
+        )
+        state = {
+            "topic_id_selection": "topic-pivot-1",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="actually it was from leadership experience. i confused")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": {
+                "experience_type": "work_experience",
+                "company": "Microsoft",
+            },
+        }
+
+        mock_output = WorkInvestigateOutput(
+            user_message="Got it, thanks for clarifying! Since this section is currently set up for Work Experience, please switch over to the Leadership tab on the right so we can capture your leadership experience accurately.",
+            experience_metadata=WorkExperienceMetadata(
+                company="Microsoft",
+            ),
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+        self.assertTrue(res["need_more_info"])
+        self.assertIn("Leadership tab", res["investigation_messages"][0].content)
+        # Ensure active_experience_metadata did not get polluted
+        self.assertEqual(res["active_experience_metadata"]["experience_type"], "work_experience")
+        self.assertNotIn("leadership_title", res["active_experience_metadata"])

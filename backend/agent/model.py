@@ -288,7 +288,9 @@ ALLOWED_KEYS_PER_TYPE = {
 
 class InvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
-    user_message: str = Field(description="Message to the user asking for more details/clarification or summarizing established experience")
+    user_message: str = Field(
+        description="Message to the user asking the next probing question, summarizing established experience, or politely directing them to switch tabs if their experience belongs to a different category."
+    )
     experience_metadata: Optional[ExperienceMetadata] = Field(
         default=None,
         description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
@@ -297,7 +299,9 @@ class InvestigateOutput(BaseModel):
 
 class WorkInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
-    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    user_message: str = Field(
+        description="Message to user asking the next question about this work experience, or directing them to switch tabs if they indicated this experience belongs to a different category (e.g. project, leadership, or other)."
+    )
     experience_metadata: Optional[WorkExperienceMetadata] = Field(
         default=None,
         description="Identity details strictly for this work experience (company, job_title, duration, location). Do NOT extract project or leadership fields."
@@ -306,7 +310,9 @@ class WorkInvestigateOutput(BaseModel):
 
 class ProjectInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
-    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    user_message: str = Field(
+        description="Message to user asking the next question about this project, or directing them to switch tabs if they indicated this experience belongs to a different category (e.g. work experience, leadership, or other)."
+    )
     experience_metadata: Optional[ProjectMetadata] = Field(
         default=None,
         description="Identity details strictly for this project (project_name, role, technologies, duration). Do NOT extract work or leadership fields."
@@ -315,7 +321,9 @@ class ProjectInvestigateOutput(BaseModel):
 
 class LeadershipInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
-    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    user_message: str = Field(
+        description="Message to user asking the next question about this leadership experience, or directing them to switch tabs if they indicated this experience belongs to a different category (e.g. work experience, project, or other)."
+    )
     experience_metadata: Optional[LeadershipMetadata] = Field(
         default=None,
         description="Identity details strictly for this leadership experience (leadership_title, position, duration, location). Do NOT extract work or project fields."
@@ -324,7 +332,9 @@ class LeadershipInvestigateOutput(BaseModel):
 
 class OtherInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
-    user_message: str = Field(description="Message to the user asking for more details/clarification.")
+    user_message: str = Field(
+        description="Message to user asking the next question about this experience, or directing them to switch tabs if they indicated this experience belongs to a different category."
+    )
     experience_metadata: Optional[OtherMetadata] = Field(
         default=None,
         description="Identity details strictly for this other experience (other_title, other_organization, other_role, other_notes)."
