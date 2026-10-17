@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Info,
   Loader2,
+  PanelRightClose,
 } from "lucide-react";
 
 export type ExperienceTabType = "work_experience" | "project" | "leadership" | "other";
@@ -23,6 +24,7 @@ interface LiveEvidenceFormProps {
   highlightErrors?: boolean;
   onSaveMetadata: (metadata: ExperienceMetadata) => Promise<void>;
   onResetTopicExperience: (newExperienceType: ExperienceTabType) => Promise<void>;
+  onClose?: () => void;
 }
 
 export function LiveEvidenceForm({
@@ -31,6 +33,7 @@ export function LiveEvidenceForm({
   highlightErrors = false,
   onSaveMetadata,
   onResetTopicExperience,
+  onClose,
 }: LiveEvidenceFormProps) {
   // Determine current active tab
   const activeTab: ExperienceTabType =
@@ -154,21 +157,34 @@ export function LiveEvidenceForm({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!isDirty || isSaving || isLoading}
-          className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          {isSaving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : saveSuccess ? (
-            <Check className="h-3.5 w-3.5 text-emerald-400 dark:text-emerald-600" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving || isLoading}
+            className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : saveSuccess ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400 dark:text-emerald-600" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            <span>{isSaving ? "Saving..." : saveSuccess ? "Saved" : "Save Changes"}</span>
+          </button>
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 dark:hover:text-stone-200 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+              title="Collapse evidence form"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </button>
           )}
-          <span>{isSaving ? "Saving..." : saveSuccess ? "Saved" : "Save Changes"}</span>
-        </button>
+        </div>
       </div>
 
       {/* Tabs */}

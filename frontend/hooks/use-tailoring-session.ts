@@ -29,6 +29,7 @@ import {
   getSessionState,
   resetTopicChat,
   sendChatMessage,
+  sendChatMessageStream,
   updateFullResume,
   uploadResume,
 } from "@/lib/api-client";
@@ -38,6 +39,10 @@ export interface ChatMessage {
   role: "assistant" | "user";
   content: string;
   timestamp: string;
+  thoughtDurationSeconds?: number;
+  thoughtStages?: string[];
+  isThinking?: boolean;
+  currentThinkingStage?: string;
 }
 
 export interface ProposalDecision {
@@ -518,45 +523,153 @@ export function useTailoringSession() {
       setIsLoading(true);
       setError(null);
 
-      try {
-        const res = await sendChatMessage(sessionId, trimmedText, action, formDataPayload);
-
-        if ("interrupt" in res.ai_response) {
-          const intr = res.ai_response.interrupt;
-          setActiveInterrupt(intr);
-
-          if (intr.experience_metadata) {
-            setActiveExperienceMetadata(intr.experience_metadata);
-          }
-
-          if (intr.type === "investigation_chat") {
-            setInvestigationMessages((prev) => [
-              ...prev,
-              {
-                id: `q_${Date.now()}`,
-                role: "assistant",
-                content: intr.message,
-                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              },
-            ]);
-          } else if (intr.type === "investigation_selection") {
-            // Topic completed! Returning to topic deck selection
-            setActiveTopicId(null);
-            setActiveExperienceMetadata(null);
-            // Refresh state to fetch updated completed_topic_ids and evidence_with_details
-            const stateRes = await getSessionState(sessionId);
-            const vals = extractStateValues(stateRes.state);
-            if (vals) {
-              if (vals.completed_topic_ids) setCompletedTopicIds(vals.completed_topic_ids as string[]);
-              if (vals.evidence_with_details) setEvidenceWithDetails(vals.evidence_with_details as EvidenceWithDetails[]);
-              if (vals.interview_plan) setInterviewPlan(vals.interview_plan as InterviewPlan);
+      // Fast-path for skip: no LLM generation needed
+      if (action === "skip") {
+        try {
+          const res = await sendChatMessage(sessionId, trimmedText, action, formDataPayload);
+          if ("interrupt" in res.ai_response) {
+            const intr = res.ai_response.interrupt;
+            setActiveInterrupt(intr);
+            if (intr.type === "investigation_selection") {
+              setActiveTopicId(null);
+              setActiveExperienceMetadata(null);
+              const stateRes = await getSessionState(sessionId);
+              const vals = extractStateValues(stateRes.state);
+              if (vals) {
+                if (vals.completed_topic_ids) setCompletedTopicIds(vals.completed_topic_ids as string[]);
+                if (vals.evidence_with_details) setEvidenceWithDetails(vals.evidence_with_details as EvidenceWithDetails[]);
+                if (vals.interview_plan) setInterviewPlan(vals.interview_plan as InterviewPlan);
+              }
             }
           }
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "Failed to skip topic");
+          throw err;
+        } finally {
+          setIsLoading(false);
         }
+        return;
+      }
+
+      // For "chat", "conclude", "form_update": Stream with ChatGPT-style thinking accordion
+      const assistantMsgId = `q_${Date.now()}`;
+      const startTime = Date.now();
+
+      // Insert placeholder assistant message with active thinking
+      setInvestigationMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          isThinking: true,
+          thoughtDurationSeconds: 0,
+          currentThinkingStage: "Analyzing candidate response...",
+        },
+      ]);
+
+      // Timer to tick thoughtDurationSeconds while thinking
+      const timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        setInvestigationMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId && msg.isThinking
+              ? { ...msg, thoughtDurationSeconds: elapsed }
+              : msg
+          )
+        );
+      }, 100);
+
+      try {
+        let accumulatedText = "";
+        let finalElapsed = 0;
+
+        await sendChatMessageStream(
+          sessionId,
+          trimmedText,
+          action,
+          formDataPayload,
+          {
+            onThinkingStage: (stage, text) => {
+              setInvestigationMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? { ...msg, currentThinkingStage: text }
+                    : msg
+                )
+              );
+            },
+            onToken: (token) => {
+              if (finalElapsed === 0) {
+                finalElapsed = (Date.now() - startTime) / 1000;
+              }
+              accumulatedText += token;
+              setInvestigationMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        isThinking: false,
+                        thoughtDurationSeconds: finalElapsed || (Date.now() - startTime) / 1000,
+                        content: accumulatedText,
+                      }
+                    : msg
+                )
+              );
+            },
+            onDone: (aiResponse) => {
+              clearInterval(timerInterval);
+              if (finalElapsed === 0) {
+                finalElapsed = (Date.now() - startTime) / 1000;
+              }
+
+              if (aiResponse && "interrupt" in aiResponse) {
+                const intr = aiResponse.interrupt;
+                setActiveInterrupt(intr);
+
+                if (intr.experience_metadata) {
+                  setActiveExperienceMetadata(intr.experience_metadata);
+                }
+
+                if (intr.type === "investigation_chat") {
+                  setInvestigationMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? {
+                            ...msg,
+                            isThinking: false,
+                            thoughtDurationSeconds: finalElapsed,
+                            content: intr.message || accumulatedText,
+                          }
+                        : msg
+                    )
+                  );
+                } else if (intr.type === "investigation_selection") {
+                  setActiveTopicId(null);
+                  setActiveExperienceMetadata(null);
+                  getSessionState(sessionId).then((stateRes) => {
+                    const vals = extractStateValues(stateRes.state);
+                    if (vals) {
+                      if (vals.completed_topic_ids) setCompletedTopicIds(vals.completed_topic_ids as string[]);
+                      if (vals.evidence_with_details) setEvidenceWithDetails(vals.evidence_with_details as EvidenceWithDetails[]);
+                      if (vals.interview_plan) setInterviewPlan(vals.interview_plan as InterviewPlan);
+                    }
+                  });
+                }
+              }
+            },
+          }
+        );
       } catch (err: unknown) {
+        clearInterval(timerInterval);
+        setInvestigationMessages((prev) =>
+          prev.filter((msg) => msg.id !== assistantMsgId || msg.content.length > 0)
+        );
         setError(err instanceof Error ? err.message : "Failed to send answer");
         throw err;
       } finally {
+        clearInterval(timerInterval);
         setIsLoading(false);
       }
     },

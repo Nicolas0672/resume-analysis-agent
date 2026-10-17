@@ -131,6 +131,97 @@ export async function sendChatMessage(
   return response.json();
 }
 
+export interface ChatStreamCallbacks {
+  onThinkingStage?: (stage: string, text: string) => void;
+  onToken?: (token: string) => void;
+  onDone?: (aiResponse: any) => void;
+}
+
+export async function sendChatMessageStream(
+  sessionId: string,
+  userMessage: string,
+  action?: "chat" | "conclude" | "skip" | "form_update" | "reset_topic",
+  formDataPayload?: Record<string, any> | null,
+  callbacks?: ChatStreamCallbacks
+): Promise<any> {
+  const formData = new FormData();
+  formData.append("session_id", sessionId);
+  formData.append("user_message", userMessage);
+  if (action) {
+    formData.append("action", action);
+  }
+  if (formDataPayload) {
+    formData.append("form_data", JSON.stringify(formDataPayload));
+  }
+
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/chat/stream`, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to stream message to resume agent";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+
+  if (!response.body) {
+    throw new ApiError("No response body received from stream", 500);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let finalAiResponse: any = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+
+      const jsonStr = trimmed.slice(5).trim();
+      if (!jsonStr) continue;
+
+      try {
+        const payload = JSON.parse(jsonStr);
+        if (payload.type === "thinking_stage" && callbacks?.onThinkingStage) {
+          callbacks.onThinkingStage(payload.stage, payload.text);
+        } else if (payload.type === "token" && callbacks?.onToken) {
+          callbacks.onToken(payload.content);
+        } else if (payload.type === "done") {
+          finalAiResponse = payload.ai_response;
+          if (callbacks?.onDone) {
+            callbacks.onDone(payload.ai_response);
+          }
+        } else if (payload.type === "error") {
+          throw new ApiError(payload.detail || "Stream error", 400);
+        }
+      } catch (e) {
+        if (e instanceof ApiError) throw e;
+        // Ignore JSON parse errors for incomplete chunks
+      }
+    }
+  }
+
+  return finalAiResponse;
+}
+
 export async function resetTopicChat(
   sessionId: string,
   newExperienceType?: string

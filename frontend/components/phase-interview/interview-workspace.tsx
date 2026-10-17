@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CandidateAnalysis,
   EvidenceWithDetails,
@@ -11,9 +11,11 @@ import {
   JobDetails,
 } from "@/lib/types";
 import { LiveEvidenceForm, ExperienceTabType } from "./live-evidence-form";
+import { ThinkingAccordion } from "./thinking-accordion";
 import { ChatMessage } from "@/hooks/use-tailoring-session";
 import { useRotatingPhrase, SYNTHESIZING_PHRASES } from "@/hooks/use-rotating-phrase";
 import { CompanyLogo } from "@/components/company-logo";
+import { ResiLogo } from "@/components/logo";
 import { TelemetryButton, TelemetryStage } from "@/components/telemetry-button";
 import {
   CheckCircle2,
@@ -32,6 +34,8 @@ import {
   Pause,
   Play,
   Lock,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 const TAILORING_ENGINE_STAGES: TelemetryStage[] = [
@@ -99,6 +103,8 @@ export function InterviewWorkspace({
   const [isProceeding, setIsProceeding] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [highlightFormErrors, setHighlightFormErrors] = useState(false);
+  const [isFormCollapsed, setIsFormCollapsed] = useState<boolean>(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const synthesizingPhrase = useRotatingPhrase(SYNTHESIZING_PHRASES, isProceeding);
 
@@ -114,6 +120,13 @@ export function InterviewWorkspace({
   useEffect(() => {
     setIsPaused(false);
   }, [activeTopicId]);
+
+  // Auto-scroll chat to bottom as new messages, tokens, or thinking stages stream in
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [investigationMessages, isLoading]);
 
   // Derive topics from activeInterrupt.options (investigation_selection) or interviewPlan
   const interruptTopics: InterviewDetails[] = (activeInterrupt?.options || [])
@@ -269,9 +282,9 @@ export function InterviewWorkspace({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ========================================================================= */}
-        {/* LEFT PANE: Persistent Evidence Tracker & Focus Area (~4 cols)            */}
+        {/* LEFT PANE: Persistent Evidence Tracker & Focus Area                      */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-4 space-y-4">
+        <div className={isInChatView && activeTopic ? "lg:col-span-3 space-y-4" : "lg:col-span-4 space-y-4"}>
           {/* Case 1: In Active Focus Chat View */}
           {isInChatView && activeTopic ? (
             <div className="rounded-xl border border-stone-200/90 bg-white/90 backdrop-blur-xs p-5 shadow-2xs dark:border-stone-800 dark:bg-stone-900/90 space-y-4">
@@ -558,13 +571,16 @@ export function InterviewWorkspace({
           )}
         </div>
 
-        {/* ========================================================================= */}
-        {/* RIGHT PANE: Guided Interview Workspace (~8 cols)                         */}
-        {/* ========================================================================= */}
-        <div className="lg:col-span-8 flex flex-col rounded-xl border border-stone-200/90 bg-white/90 backdrop-blur-xs shadow-2xs dark:border-stone-800 dark:bg-stone-900/90 min-h-[560px]">
-          {isInChatView && activeTopic ? (
-            /* ================= ACTIVE QUESTION PROBE VIEW ================= */
-            <div className="flex flex-col flex-1">
+        {isInChatView && activeTopic ? (
+          <>
+            {/* ========================================================================= */}
+            {/* CENTER PANE: Guided Interview Chat Workspace (5 cols, or 9 if collapsed) */}
+            {/* ========================================================================= */}
+            <div
+              className={`${
+                isFormCollapsed ? "lg:col-span-9" : "lg:col-span-5"
+              } flex flex-col rounded-xl border border-stone-200/90 bg-white/90 backdrop-blur-xs shadow-2xs dark:border-stone-800 dark:bg-stone-900/90 min-h-[560px] overflow-hidden transition-all duration-300`}
+            >
               {/* Header */}
               <div className="p-4 sm:p-5 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-950/40 rounded-t-xl">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -578,6 +594,26 @@ export function InterviewWorkspace({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* Toggle Evidence Form Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFormCollapsed((prev) => !prev)}
+                      className="cursor-pointer text-xs font-medium text-stone-600 hover:text-stone-900 border border-stone-200 bg-white hover:bg-stone-50 px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-2xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:text-stone-100"
+                      title={isFormCollapsed ? "Show Live Evidence Form" : "Collapse Live Evidence Form"}
+                    >
+                      {isFormCollapsed ? (
+                        <>
+                          <PanelRightOpen className="h-3.5 w-3.5 text-stone-600 dark:text-stone-300" />
+                          <span className="hidden sm:inline">Show Form</span>
+                        </>
+                      ) : (
+                        <>
+                          <PanelRightClose className="h-3.5 w-3.5 text-stone-500 dark:text-stone-400" />
+                          <span className="hidden sm:inline">Collapse Form</span>
+                        </>
+                      )}
+                    </button>
+
                     {/* Pause Probe Button */}
                     <button
                       type="button"
@@ -617,146 +653,181 @@ export function InterviewWorkspace({
                 </div>
               </div>
 
-              {/* 2-Column Side-by-Side Grid: Left Chat, Right Live Form */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 min-h-[460px] bg-stone-50/30 dark:bg-stone-900/30">
-                {/* Left Column: Chat Conversation Thread & Composer */}
-                <div className="lg:col-span-7 flex flex-col rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden shadow-xs">
-                  {/* Chat Thread */}
-                  <div className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[360px]">
-                    {investigationMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`flex ${
-                          msg.role === "user" ? "justify-end" : "justify-start"
-                        }`}
-                      >
-                        <div
-                          className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                            msg.role === "user"
-                              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
-                              : "bg-stone-100 text-zinc-900 dark:bg-stone-800 dark:text-zinc-100 border border-stone-200 dark:border-stone-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-1 text-[11px] opacity-70">
-                            {msg.role === "assistant" ? (
-                              <>
-                                <Sparkles className="h-3 w-3 text-emerald-500" />
-                                <span>Interview Agent</span>
-                              </>
-                            ) : (
-                              <span>You</span>
-                            )}
-                            <span>•</span>
-                            <span>{msg.timestamp}</span>
+              {/* Chat Thread */}
+              <div
+                ref={chatScrollRef}
+                className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[460px] min-h-[340px]"
+              >
+                {investigationMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
+                          : "bg-stone-100 text-zinc-900 dark:bg-stone-800 dark:text-zinc-100 border border-stone-200 dark:border-stone-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1.5 text-[11px] opacity-75">
+                        {msg.role === "assistant" ? (
+                          <>
+                            <ResiLogo size={10} className="rounded-md shrink-0 border-stone-700/60" />
+                            <span className="font-semibold text-zinc-900 dark:text-zinc-100">ResiAgent</span>
+                          </>
+                        ) : (
+                          <span className="font-medium">You</span>
+                        )}
+                        <span>•</span>
+                        <span>{msg.timestamp}</span>
+                      </div>
+
+                      {/* ChatGPT-style Thinking / Analyzation Accordion */}
+                      {msg.role === "assistant" &&
+                        (msg.isThinking ||
+                          (msg.thoughtDurationSeconds !== undefined && msg.thoughtDurationSeconds > 0)) && (
+                          <div className="mb-2.5">
+                            <ThinkingAccordion
+                              isThinking={msg.isThinking || false}
+                              durationSeconds={msg.thoughtDurationSeconds || 0}
+                              currentStage={msg.currentThinkingStage}
+                            />
                           </div>
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))}
+                        )}
 
-                    {isLoading && (
-                      <div className="flex justify-start">
-                        <div className="rounded-2xl bg-stone-100 dark:bg-stone-800 px-4 py-3 text-sm text-stone-500 flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-stone-600 dark:text-stone-400" />
-                          <span>Analyzing your response & checking evidence...</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Response Composer */}
-                  <div className="p-4 border-t border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 space-y-3">
-                    {/* Guidance Chips & Safe Conclusion Actions */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500">
-                      <span className="italic flex items-center gap-1">
-                        <HelpCircle className="h-3.5 w-3.5 text-stone-400" />
-                        Tip: Name specific tools, team scale, and measurable results.
-                      </span>
-
-                      <div className="flex items-center gap-3">
-                        {/* Respectful Wrap Up Action */}
-                        <button
-                          type="button"
-                          onClick={handleWrapUpTopic}
-                          disabled={isLoading}
-                          className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 font-semibold text-xs flex items-center gap-1"
-                        >
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Wrap Up & Save Evidence</span>
-                        </button>
-
-                        <span className="text-stone-300 dark:text-stone-700">•</span>
-
-                        {/* Rare skip option */}
-                        <button
-                          type="button"
-                          onClick={handlePreFillSkip}
-                          disabled={isLoading}
-                          className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-400 hover:text-rose-600 text-[11px]"
-                        >
-                          Skip topic
-                        </button>
-                      </div>
+                      {msg.content ? (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      ) : msg.isThinking ? null : (
+                        <p className="text-xs text-stone-400 italic">No response text received.</p>
+                      )}
                     </div>
+                  </div>
+                ))}
 
-                    <form onSubmit={handleSend} className="space-y-2">
-                      <textarea
-                        rows={3}
-                        value={answerInput}
-                        onChange={(e) => setAnswerInput(e.target.value)}
-                        placeholder="Describe your hands-on experience, responsibilities, or specific project outcomes..."
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSend();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-stone-300 bg-white p-3 text-sm text-zinc-900 placeholder:text-stone-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-stone-700 dark:bg-stone-800 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
-                      />
+                {isLoading && !investigationMessages.some((m) => m.isThinking) && (
+                  <div className="flex justify-start">
+                    <div className="rounded-2xl bg-stone-100 dark:bg-stone-800 px-4 py-3 text-sm text-stone-500 flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-stone-600 dark:text-stone-400" />
+                      <span>Connecting to agent stream...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-stone-400">
-                          Press <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Enter ↵</kbd> to submit, <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Shift+Enter</kbd> for newline
-                        </span>
+              {/* Response Composer */}
+              <div className="p-4 border-t border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 space-y-3">
+                {/* Guidance Chips & Safe Conclusion Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500">
+                  <span className="italic flex items-center gap-1">
+                    <HelpCircle className="h-3.5 w-3.5 text-stone-400" />
+                    Tip: Name specific tools, team scale, and measurable results.
+                  </span>
 
-                        <button
-                          type="submit"
-                          disabled={isLoading || !answerInput.trim()}
-                          className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-stone-200 disabled:text-stone-500 disabled:border-stone-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-stone-800 dark:disabled:text-stone-400 transition-all"
-                        >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              <span>Evaluating Response...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>Send Response</span>
-                              <Send className="h-3.5 w-3.5" />
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </form>
+                  <div className="flex items-center gap-3">
+                    {isFormCollapsed && (
+                      <button
+                        type="button"
+                        onClick={() => setIsFormCollapsed(false)}
+                        className="cursor-pointer text-[11px] text-stone-700 hover:text-zinc-900 dark:text-stone-300 dark:hover:text-zinc-100 font-medium inline-flex items-center gap-1 transition-colors"
+                      >
+                        <PanelRightOpen className="h-3 w-3" />
+                        <span>Show Evidence Form</span>
+                      </button>
+                    )}
+
+                    {/* Respectful Wrap Up Action */}
+                    <button
+                      type="button"
+                      onClick={handleWrapUpTopic}
+                      disabled={isLoading}
+                      className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 font-semibold text-xs flex items-center gap-1"
+                    >
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Wrap Up & Save Evidence</span>
+                    </button>
+
+                    <span className="text-stone-300 dark:text-stone-700">•</span>
+
+                    {/* Rare skip option */}
+                    <button
+                      type="button"
+                      onClick={handlePreFillSkip}
+                      disabled={isLoading}
+                      className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-400 hover:text-rose-600 text-[11px]"
+                    >
+                      Skip topic
+                    </button>
                   </div>
                 </div>
 
-                {/* Right Column: Live Evidence Form */}
-                <div className="lg:col-span-5 flex flex-col">
-                  {onSaveMetadata && onResetTopicExperience ? (
-                    <LiveEvidenceForm
-                      metadata={activeExperienceMetadata || null}
-                      isLoading={isLoading}
-                      highlightErrors={highlightFormErrors}
-                      onSaveMetadata={onSaveMetadata}
-                      onResetTopicExperience={onResetTopicExperience}
-                    />
-                  ) : null}
-                </div>
+                <form onSubmit={handleSend} className="space-y-2">
+                  <textarea
+                    rows={3}
+                    value={answerInput}
+                    onChange={(e) => setAnswerInput(e.target.value)}
+                    placeholder="Describe your hands-on experience, responsibilities, or specific project outcomes..."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    className="w-full rounded-lg border border-stone-300 bg-white p-3 text-sm text-zinc-900 placeholder:text-stone-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-stone-700 dark:bg-stone-800 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
+                  />
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-stone-400">
+                      Press <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Enter ↵</kbd> to submit, <kbd className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">Shift+Enter</kbd> for newline
+                    </span>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading || !answerInput.trim()}
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-zinc-800 disabled:bg-stone-200 disabled:text-stone-500 disabled:border-stone-300 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-stone-800 dark:disabled:text-stone-400 transition-all"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Evaluating Response...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Send Response</span>
+                          <Send className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
-          ) : (
-            /* ================= TOPIC DECK SELECTION VIEW ================= */
+
+            {/* ========================================================================= */}
+            {/* RIGHT PANE: Standalone Live Evidence Form (4 cols, docked on right edge)   */}
+            {/* ========================================================================= */}
+            {!isFormCollapsed && (
+              <div className="lg:col-span-4 flex flex-col h-full animate-in fade-in duration-200">
+                {onSaveMetadata && onResetTopicExperience ? (
+                  <LiveEvidenceForm
+                    metadata={activeExperienceMetadata || null}
+                    isLoading={isLoading}
+                    highlightErrors={highlightFormErrors}
+                    onSaveMetadata={onSaveMetadata}
+                    onResetTopicExperience={onResetTopicExperience}
+                    onClose={() => setIsFormCollapsed(true)}
+                  />
+                ) : null}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ========================================================================= */
+          /* RIGHT PANE: Topic Deck Selection View (8 cols)                           */
+          /* ========================================================================= */
+          <div className="lg:col-span-8 flex flex-col rounded-xl border border-stone-200/90 bg-white/90 backdrop-blur-xs shadow-2xs dark:border-stone-800 dark:bg-stone-900/90 min-h-[560px]">
             <div className="p-6 sm:p-8 flex flex-col justify-between flex-1 space-y-6">
               <div>
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 mb-3 border border-emerald-200 dark:border-emerald-800">
@@ -880,8 +951,8 @@ export function InterviewWorkspace({
                 </TelemetryButton>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
