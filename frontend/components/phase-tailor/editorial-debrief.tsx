@@ -515,8 +515,12 @@ export function EditorialDebrief({
                 </div>
 
                 <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                  {unmatched.job_title || unmatched.project_name}{" "}
-                  {unmatched.company_name && `at ${unmatched.company_name}`}
+                  {unmatched.job_title || unmatched.leadership_position || unmatched.project_name}{" "}
+                  {unmatched.company_name
+                    ? `at ${unmatched.company_name}`
+                    : unmatched.leadership_title
+                    ? `at ${unmatched.leadership_title}`
+                    : ""}
                 </div>
 
                 <div className="space-y-1 mt-2">

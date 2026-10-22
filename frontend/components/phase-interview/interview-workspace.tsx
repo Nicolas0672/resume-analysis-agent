@@ -212,7 +212,7 @@ export function InterviewWorkspace({
     if (type === "work_experience") {
       if (!meta?.company?.trim() || !meta?.job_title?.trim()) isMissing = true;
     } else if (type === "project") {
-      if (!meta?.project_name?.trim() || !meta?.role?.trim()) isMissing = true;
+      if (!meta?.project_name?.trim()) isMissing = true;
     } else if (type === "leadership") {
       if (!meta?.leadership_title?.trim() || !meta?.position?.trim()) isMissing = true;
     } else if (type === "other") {
@@ -743,10 +743,14 @@ export function InterviewWorkspace({
                       type="button"
                       onClick={handleWrapUpTopic}
                       disabled={isLoading}
-                      className="cursor-pointer bg-transparent hover:underline disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 font-semibold text-xs flex items-center gap-1"
+                      className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:hover:no-underline disabled:cursor-not-allowed ${
+                        activeInterrupt?.is_sufficient
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs animate-pulse ring-2 ring-emerald-400 ring-offset-1"
+                          : "text-stone-700 hover:text-emerald-700 dark:text-stone-300 dark:hover:text-emerald-400 hover:underline bg-transparent"
+                      }`}
                     >
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Wrap Up & Save Evidence</span>
+                      <Check className={`h-3.5 w-3.5 ${activeInterrupt?.is_sufficient ? "text-white" : "text-emerald-600"}`} />
+                      <span>Wrap Up & Save Evidence {activeInterrupt?.is_sufficient ? "→" : ""}</span>
                     </button>
 
                     <span className="text-stone-300 dark:text-stone-700">•</span>
@@ -763,12 +767,39 @@ export function InterviewWorkspace({
                   </div>
                 </div>
 
+                {activeInterrupt?.is_sufficient && (
+                  <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/90 dark:bg-emerald-950/40 p-3 flex items-center justify-between gap-3 text-emerald-950 dark:text-emerald-200 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-xs font-semibold">
+                        Target Evidence Cleared!
+                      </span>
+                      <span className="text-xs text-emerald-800/80 dark:text-emerald-300/80 hidden sm:inline">
+                        — The interviewer has gathered enough substance to draft your resume bullet points.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleWrapUpTopic}
+                      disabled={isLoading}
+                      className="cursor-pointer inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-all shadow-xs shrink-0"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Wrap Up Topic</span>
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleSend} className="space-y-2">
                   <textarea
                     rows={3}
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
-                    placeholder="Describe your hands-on experience, responsibilities, or specific project outcomes..."
+                    placeholder={
+                      activeInterrupt?.is_sufficient
+                        ? "Target evidence captured! Add any optional extra details here, or click 'Wrap Up Topic' above..."
+                        : "Describe your hands-on experience, responsibilities, or specific project outcomes..."
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -815,6 +846,7 @@ export function InterviewWorkspace({
                     metadata={activeExperienceMetadata || null}
                     isLoading={isLoading}
                     highlightErrors={highlightFormErrors}
+                    hasUserReplied={investigationMessages.some((m) => m.role === "user")}
                     onSaveMetadata={onSaveMetadata}
                     onResetTopicExperience={onResetTopicExperience}
                     onClose={() => setIsFormCollapsed(true)}

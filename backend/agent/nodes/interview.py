@@ -26,8 +26,6 @@ def validate_experience_metadata(metadata: dict | None) -> tuple[bool, str]:
     elif exp_type == "project":
         if not metadata.get("project_name") or not str(metadata.get("project_name")).strip():
             return False, "Project Name is required for Project Experience."
-        if not metadata.get("role") or not str(metadata.get("role")).strip():
-            return False, "Your Role is required for Project Experience."
     elif exp_type == "leadership":
         if not metadata.get("leadership_title") or not str(metadata.get("leadership_title")).strip():
             return False, "Organization / Activity Title is required for Leadership."
@@ -47,6 +45,7 @@ def reset_investigation(state: AgentState):
         ],
         "human_investigate_action": "chat",
         "active_experience_metadata": None,
+        "is_sufficient": False,
     }
 
 async def investigate_candidate(state: AgentState):
@@ -86,6 +85,7 @@ async def investigate_candidate(state: AgentState):
             "need_more_info": False,
             "completed_topic_ids": [topic_id],
             "active_experience_metadata": None,
+            "is_sufficient": True,
         }
 
     # Case 2: Human reset topic to switch experience type
@@ -117,6 +117,7 @@ Do not reference past conversation or past experiences.
                 AIMessage(content=response.user_message),
             ],
             "need_more_info": True,
+        "is_sufficient": bool(getattr(response, "is_sufficient", False)),
             "active_experience_metadata": active_metadata,
         }
 
@@ -149,6 +150,7 @@ Ask EXACTLY ONE question.
         return {
             "investigation_messages": [AIMessage(content=response.user_message)],
             "need_more_info": True,
+        "is_sufficient": bool(getattr(response, "is_sufficient", False)),
             "active_experience_metadata": active_metadata,
         }
 
@@ -166,8 +168,8 @@ The established experience metadata is: {active_experience_metadata}
 
 Your task is to:
 1. Thoroughly review the conversation history and all candidate statements for this topic.
-2. Extract all truthful, verified evidence discovered during the conversation into the Evidence schema (including company/project name, actions, ownership, tools/technologies, metrics, scale, and impact).
-3. Ensure company, job_title, project_name, and duration reflect the established metadata.
+2. Extract all truthful, verified evidence discovered during the conversation into the Evidence schema (including experience_type, company, job_title, project_name, leadership details, actions, ownership, tools/technologies, metrics, scale, and impact).
+3. Ensure experience_type, company, job_title, project_name, leadership_title, and duration reflect the established metadata.
 4. If no relevant evidence was found or the candidate lacked experience, set evidence to None.
 5. Provide a warm, concise user_message summarizing what was established and confirming that this topic is concluded.
 DO NOT ask any questions. Do not ask for more information.
@@ -200,12 +202,20 @@ DO NOT ask any questions. Do not ask for more information.
 
         # Backfill metadata into evidence if LLM omitted specific identity fields
         if response.evidence:
+            if active_metadata.get("experience_type"):
+                response.evidence.experience_type = active_metadata.get("experience_type")
             if active_metadata.get("company") and not response.evidence.company:
                 response.evidence.company = active_metadata.get("company")
             if active_metadata.get("job_title") and not response.evidence.job_title:
                 response.evidence.job_title = active_metadata.get("job_title")
             if active_metadata.get("project_name") and not response.evidence.project_name:
                 response.evidence.project_name = active_metadata.get("project_name")
+            if active_metadata.get("leadership_title") and not response.evidence.leadership_title:
+                response.evidence.leadership_title = active_metadata.get("leadership_title")
+            if active_metadata.get("position") and not response.evidence.leadership_position:
+                response.evidence.leadership_position = active_metadata.get("position")
+            if active_metadata.get("other_title") and not response.evidence.other_title:
+                response.evidence.other_title = active_metadata.get("other_title")
             if active_metadata.get("duration") and not response.evidence.duration:
                 response.evidence.duration = active_metadata.get("duration")
             if active_metadata.get("location") and not response.evidence.job_location:
@@ -220,6 +230,7 @@ DO NOT ask any questions. Do not ask for more information.
             "evidence_with_details": [updated_details],
             "completed_topic_ids": [topic_id],
             "active_experience_metadata": None,
+            "is_sufficient": True,
         }
 
     # Case 5: Human sent an answer to continue the conversation
@@ -238,6 +249,7 @@ DO NOT ask any questions. Do not ask for more information.
         scoping_instructions = f"""
 ### Category Focus & Mandatory Tab Redirection:
 - The current investigation is set to {type_display}: "{entity_name}".
+- Keep questions focused strictly on uncovering concrete evidence for "{{objective}}" within this {type_display}.
 
 ### PRIORITY OVERRIDE — CATEGORY PIVOT OR CORRECTION:
 If the candidate indicates that they were confused, made a mistake, or states that their experience actually belongs to a DIFFERENT category (e.g., "actually it was from leadership", "actually this was a personal project, not work", "I didn't do this at my job"):
@@ -253,7 +265,7 @@ If the candidate indicates that they were confused, made a mistake, or states th
 4. Leave `experience_metadata` as null or empty for any fields that belong to the other category so the active form is not corrupted.
 
 ### Regular Category Guardrail:
-- When exploring {type_display}: "{entity_name}", keep questions focused strictly on concrete actions, ownership, technologies, and metrics for this {type_display}.
+- When exploring {type_display}: "{entity_name}", keep questions focused strictly on concrete actions, ownership, and metrics for "{{objective}}" within this {type_display}.
 - If the candidate describes work clearly belonging to a different experience, STOP probing and politely instruct them to switch to the appropriate tab (Work Experience, Project, Leadership, or Other). Do not collect evidence from that experience or incorporate it into the active experience's metadata.
 - Populate `experience_metadata` ONLY with identity fields relevant to this {type_display}.
 """
@@ -262,48 +274,76 @@ If the candidate indicates that they were confused, made a mistake, or states th
 ### Initial Experience Detection:
 - The experience category for this requirement has not been determined yet.
 - From the candidate's response, determine whether this experience is best categorized as 'work_experience', 'project', 'leadership', or 'other', and set experience_type accordingly in experience_metadata.
-- Once determined, focus exclusively on that single experience.
+- Once determined, focus exclusively on that single experience, investigating how they demonstrated {objective} within it.
 """
 
     prompt = ChatPromptTemplate.from_messages([
 ("system",
 f"""
-You are an expert technical interviewer and resume strategist. Your single objective is to guide the candidate to uncover high-impact evidence for strong, compelling resume bullet points tailored to the job requirement.
+You are an expert technical interviewer and resume strategist. Your single mission is to guide the candidate to uncover high-impact evidence for strong, compelling resume bullet points tailored to the target job requirement.
+
+### INVESTIGATION TARGET (NORTH STAR):
+- TOPIC: {{topic}}
+- OBJECTIVE: {{objective}}
+- JOB REQUIREMENT: {{job_requirement}}
 
 Current active experience metadata: {{active_experience_metadata}}
 Established evidence bank: {{evidence_with_details}}
 
-### The 4 Pillars of Resume Evidence:
+### PRIMARY DIRECTIVE — OBJECTIVE-ANCHORED PROBING (NON-NEGOTIABLE):
+Every single question you ask MUST actively probe and gather evidence for THIS SPECIFIC OBJECTIVE: "{{objective}}".
+- NEVER fall back to generic software interrogation like "What technical challenge did you work on? What was your role, and what technologies or tools did you use?".
+- ALWAYS evaluate the 4 pillars (Problem, Action, Trade-offs, Impact) THROUGH THE LENS OF "{{objective}}".
+- When the candidate establishes or returns to an experience (e.g. an internship or project), frame your next question around how they demonstrated "{{objective}}" in that setting.
+
+### THE BRIDGE-BACK TECHNIQUE (PREVENTING UNRELATED RABBIT HOLES):
+- When the candidate answers with technical specifics, implementation mechanics, or architecture:
+  1. In ONE brief, natural phrase, acknowledge their technical work.
+  2. IMMEDIATELY bridge it back to the objective: "{{objective}}".
+- Example: If the objective is "Cross-Functional Communication / Collaboration" and the candidate says "I built a vector retrieval pipeline using LangChain and FastAPI":
+  - BAD: "Could you share a specific technical challenge or project you worked on there? What technologies did you use?" (Completely loses the objective!)
+  - BAD: "What embedding model and chunk size did you configure in LangChain?" (Rabbit hole!)
+  - GOOD: "You engineered that retrieval pipeline—how did you coordinate with product managers or frontend engineers to align on API contracts and communicate latency trade-offs?"
+- Example: If the objective is "System Scalability" and the candidate talks about team meetings:
+  - GOOD: "Glad you aligned with the team—what architectural decisions or load-testing strategies did you implement to ensure the system scaled under high user concurrency?"
+
+### The 4 Pillars of Resume Evidence (Applied to {{objective}}):
 Every strong resume bullet point needs a balance of:
-1. PROBLEM & CONTEXT: What was the technical challenge, scale, or bottleneck? (e.g. high latency, token costs, 500 concurrent users).
-2. ARCHITECTURE & TECHNICAL ACTION: What key architectural decisions, patterns, or tools did the candidate build or implement? (e.g. FastAPI async pipeline, semantic chunking, vector retrieval).
-3. TRADE-OFFS & CRITICAL THINKING: Why this approach over alternatives? What was a key obstacle or trade-off they navigated?
-4. MEASURABLE IMPACT & OUTCOMES: What was the quantifiable result or benefit? (e.g. p95 latency cut by 40%, token consumption halved, reliable uptime).
+1. PROBLEM & CONTEXT: What was the specific obstacle, scale, or context relating to {{objective}}?
+2. CONCRETE ACTIONS & OWNERSHIP: What specific methods, decisions, or processes did the candidate personally lead or implement to achieve {{objective}}?
+3. TRADE-OFFS & CRITICAL THINKING: Why this approach over alternatives? What friction, conflict, or technical bottleneck did they navigate regarding {{objective}}?
+4. MEASURABLE IMPACT & OUTCOMES: What was the quantifiable result or benefit (e.g. latency cut, alignment speed, metrics, performance, adoption) achieved for {{objective}}?
 
 ### How to Guide the Candidate (Gap-Driven Interviewing):
 - Look at the `conversation_history`, `active_experience_metadata`, and `relevant_experience_from_resume`.
-- Identify what is ALREADY ESTABLISHED vs WHAT IS STILL MISSING to craft stellar resume bullets.
-- Actively guide the candidate toward the missing pillar (especially Measurable Impact, Scale, or Architectural Trade-offs).
-- If the candidate answers with high-level theory, prompt for concrete scale or architectural specifics.
+- Identify what is ALREADY ESTABLISHED vs WHAT IS STILL MISSING to craft stellar resume bullets for {{objective}}.
+- Actively guide the candidate toward the missing pillar (especially Measurable Impact, Scale, or Critical Trade-offs).
+- If the candidate answers with high-level theory, prompt for concrete specifics.
 - If the candidate answers with low-level implementation, lift them up to the impact, trade-offs, and outcomes.
 
 ### Crucial Conversational Guardrails:
 1. BREADTH OVER TRIVIA (NO TUNNEL VISION):
    - NEVER drill down into routine boilerplate code, standard libraries, or trivial setup details (e.g. NEVER ask how Python standard logging was configured, how libraries were imported, or how cosine similarity formulas work).
-   - Once a technical choice is explained, do NOT keep asking "how did you implement that". Instead, PIVOT to Trade-offs or Measurable Impact.
+   - Once a choice is explained, do NOT keep asking "how did you implement that". Instead, PIVOT to Trade-offs or Measurable Impact relating to {{objective}}.
 2. NATURAL & ENGAGING DIALOGUE (NO ROBOTIC ECHOES):
    - NEVER start questions with formulaic, repetitive echoes like "You've mentioned...", "You described...", or "You've shared...".
-   - Speak naturally like a senior engineering manager or staff engineer having a collaborative whiteboard session: direct, curious, and encouraging.
+   - Speak naturally like a senior engineering leader: direct, curious, and collaborative.
 3. SINGLE EXPERIENCE FOCUS & CATEGORY REDIRECTION:
    - Only explore ONE experience entity per topic.
    - If the candidate mentions an experience belonging to a different category or states they want to share an experience from another category, DO NOT force them to stay on the current entity. Warmly acknowledge it and direct them to switch to the corresponding tab on the right.
 4. IDENTITY GAPS:
-   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, prioritize asking for those identity details early.
+   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, ask for those details early while anchoring to {{objective}} (e.g. "What was your role at Microsoft, and what project best highlights your cross-functional collaboration?").
 5. ONE QUESTION AT A TIME:
    - Ask EXACTLY ONE thoughtful, high-leverage question at a time.
-6. SUFFICIENCY & GENTLE WRAP-UP:
-   - Once the conversation covers the problem, technical implementation, and metrics or trade-offs with enough substance to craft 2-3 stellar resume bullet points, DO NOT keep interrogating.
-   - Warmly summarize the strong evidence gathered and let the candidate know they have great material and can click "Wrap Up & Save Evidence" whenever they are ready, or share any final highlights.
+6. SUFFICIENCY & GENTLE WRAP-UP (SET is_sufficient = True):
+   - Once the conversation covers the problem, actions, and metrics or trade-offs with enough substance to craft 2-3 stellar resume bullet points for {{objective}}, DO NOT keep interrogating.
+   - Set `is_sufficient = True`.
+   - In `user_message`, warmly summarize the strong evidence gathered and let the candidate know they have great material and can click "Wrap Up & Save Evidence" whenever they are ready. DO NOT end with a question mark. DO NOT ask for more information.
+7. NEGATIVE RESPONSES & DIMINISHING RETURNS:
+   - If the candidate answers "no", "I haven't", or states that they did not use other tools or have no further details:
+     - DO NOT interrogate them on why they haven't used other tools or what would motivate them to learn them.
+     - Set `is_sufficient = True`.
+     - Warmly acknowledge what they DID accomplish with their core tools and invite them to wrap up.
 {scoping_instructions}
 """),
     ("human", 
@@ -350,6 +390,7 @@ Every strong resume bullet point needs a balance of:
     return {
         "investigation_messages": [AIMessage(content=response.user_message)],
         "need_more_info": True,
+        "is_sufficient": bool(getattr(response, "is_sufficient", False)),
         "active_experience_metadata": merged_metadata or None,
     }
     

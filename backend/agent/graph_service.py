@@ -190,6 +190,8 @@ def normalize_graph_response(result):
         }
         if isinstance(value, dict) and "experience_metadata" in value:
             intr_dict["experience_metadata"] = value["experience_metadata"]
+        if isinstance(value, dict) and "is_sufficient" in value:
+            intr_dict["is_sufficient"] = value["is_sufficient"]
 
         return {
             "interrupt": intr_dict,

@@ -18,12 +18,19 @@ from agent.model import (
     LeadershipMetadata,
     OtherMetadata,
     ProjectMetadata,
+    ResumeBullet,
     ResumeReference,
+    TailorDecisionUnmatched,
+    TailorUnmatched,
+    TailorUnmatchedList,
+    EvidenceMapping,
+    EvidenceMappingResult,
     WorkExperienceMetadata,
     WorkInvestigateOutput,
 )
 from agent.nodes.human_decision import human_after_interview_planner, human_investigate_chat
 from agent.nodes.interview import investigate_candidate, reset_investigation, validate_experience_metadata
+from agent.nodes.tailor_agent import tailor_resume_bullet_points
 from agent.graph_service import resume_tailoring_session
 from model.job_pydantic import ResumeExperience, ResumeStructure
 
@@ -40,6 +47,32 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("need_more_info", schema.get("properties", {}))
         self.assertNotIn("need_more_info", schema.get("required", []))
         self.assertIn("experience_metadata", schema.get("properties", {}))
+        self.assertIn("is_sufficient", schema.get("properties", {}))
+
+    def test_investigate_output_models_include_is_sufficient(self):
+        """Ensure is_sufficient is present in the JSON schema across all specialized investigate output models."""
+        from agent.model import ProjectInvestigateOutput, LeadershipInvestigateOutput, OtherInvestigateOutput
+        for cls in [InvestigateOutput, WorkInvestigateOutput, ProjectInvestigateOutput, LeadershipInvestigateOutput, OtherInvestigateOutput]:
+            schema = cls.model_json_schema()
+            self.assertIn("is_sufficient", schema.get("properties", {}))
+
+    def test_normalize_graph_response_preserves_is_sufficient(self):
+        """Ensure normalize_graph_response preserves is_sufficient in the normalized interrupt dict."""
+        from agent.graph_service import normalize_graph_response
+        mock_result = {
+            "__interrupt__": [
+                MockInterrupt({
+                    "type": "investigation_chat",
+                    "message": "Wrap up summary",
+                    "options": [],
+                    "experience_metadata": {"company": "Acme"},
+                    "is_sufficient": True,
+                })
+            ]
+        }
+        normalized = normalize_graph_response(mock_result)
+        self.assertIn("interrupt", normalized)
+        self.assertTrue(normalized["interrupt"].get("is_sufficient"))
 
     def test_validate_experience_metadata(self):
         """Test required and optional field validation across all experience types."""
@@ -56,10 +89,12 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         valid, err = validate_experience_metadata({"experience_type": "work_experience", "company": "Stripe", "job_title": "SWE"})
         self.assertTrue(valid)
 
-        # Project: needs project_name and role
-        valid, err = validate_experience_metadata({"experience_type": "project", "project_name": "App"})
+        # Project: needs project_name (role is optional)
+        valid, err = validate_experience_metadata({"experience_type": "project"})
         self.assertFalse(valid)
-        self.assertIn("Role", err)
+        self.assertIn("Project Name", err)
+        valid, err = validate_experience_metadata({"experience_type": "project", "project_name": "App"})
+        self.assertTrue(valid)
         valid, err = validate_experience_metadata({"experience_type": "project", "project_name": "App", "role": "Creator"})
         self.assertTrue(valid)
 
@@ -490,3 +525,252 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         # Ensure active_experience_metadata did not get polluted
         self.assertEqual(res["active_experience_metadata"]["experience_type"], "work_experience")
         self.assertNotIn("leadership_title", res["active_experience_metadata"])
+
+    async def test_investigate_candidate_prompt_contains_objective_as_north_star(self):
+        """Ensure system prompt formats the objective as the North Star with Bridge-Back technique instructions."""
+        topic = InterviewDetails(
+            topic_id="topic-comm-1",
+            topic="Cross-Functional Communication",
+            priority="High",
+            reason="Core soft skill",
+            objective="Evaluate cross-team alignment and communication trade-offs",
+            job_requirement="Strong cross-functional collaboration and stakeholder alignment",
+            relevant_experience=["Microsoft Internship"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specific cross-team coordination details missing",
+        )
+        state = {
+            "topic_id_selection": "topic-comm-1",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="wait i think i got it from my internship at microsoft")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": {
+                "experience_type": "work_experience",
+                "company": "Microsoft",
+            },
+        }
+
+        mock_output = WorkInvestigateOutput(
+            user_message="At Microsoft, what was a specific project where you had to collaborate with different teams or departments, and how did you communicate technical constraints?",
+            experience_metadata=WorkExperienceMetadata(
+                company="Microsoft",
+            ),
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+            # Inspect the prompt that was passed to the LLM
+            call_args = mock_structured.ainvoke.call_args[0][0]
+            system_prompt_content = call_args[0].content
+
+            # Verify Primary Directive and North Star were formatted into system prompt
+            self.assertIn("INVESTIGATION TARGET (NORTH STAR)", system_prompt_content)
+            self.assertIn("PRIMARY DIRECTIVE — OBJECTIVE-ANCHORED PROBING", system_prompt_content)
+            self.assertIn("Evaluate cross-team alignment and communication trade-offs", system_prompt_content)
+            self.assertIn("THE BRIDGE-BACK TECHNIQUE", system_prompt_content)
+
+        self.assertTrue(res["need_more_info"])
+        self.assertIn("collaborate", res["investigation_messages"][0].content)
+        self.assertEqual(res["active_experience_metadata"]["company"], "Microsoft")
+
+    async def test_investigate_candidate_conclude_work_experience_stamps_provenance(self):
+        """Test investigate_candidate action='conclude' stamps experience_type and identity fields."""
+        topic = InterviewDetails(
+            topic_id="topic-msft",
+            topic="Cross-Functional Collaboration",
+            priority="High",
+            reason="Core soft skill",
+            objective="Evaluate cross-team coordination",
+            job_requirement="Cross-functional collaboration",
+            relevant_experience=["Microsoft Internship"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specific coordination details missing",
+        )
+        state = {
+            "topic_id_selection": "topic-msft",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="Collaborated with PM and UX teams on telemetry tools")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "conclude",
+            "active_experience_metadata": {
+                "experience_type": "work_experience",
+                "company": "Microsoft",
+                "job_title": "SWE Intern",
+                "duration": "Summer 2024",
+                "location": "Redmond, WA",
+            },
+        }
+
+        # Mock LLM output which might omit experience_type or extract an internal project name
+        mock_evidence = Evidence(
+            project_name="Telemetry Aggregator",
+            experience_found=["Coordinated API contracts across 3 teams"],
+            technologies=["TypeScript", "gRPC"],
+        )
+        mock_output = InvestigateOutput(
+            evidence=mock_evidence,
+            user_message="Concluded investigation of Microsoft internship.",
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+        evidence = res["evidence_with_details"][0].evidence
+        self.assertEqual(evidence.experience_type, "work_experience")
+        self.assertEqual(evidence.company, "Microsoft")
+        self.assertEqual(evidence.job_title, "SWE Intern")
+        self.assertEqual(evidence.duration, "Summer 2024")
+        self.assertEqual(evidence.job_location, "Redmond, WA")
+
+    async def test_tailor_unmatched_provenance_lock_work_experience(self):
+        """Test tailor_resume_bullet_points enforces type='work_experience' and company/job_title even if LLM guessed project."""
+        evidence = Evidence(
+            experience_type="work_experience",
+            company="Microsoft",
+            job_title="SWE Intern",
+            project_name="Telemetry Aggregator",
+            duration="Summer 2024",
+            job_location="Redmond, WA",
+            experience_found=["Engineered cross-team data bridge"],
+        )
+        ev_details = EvidenceWithDetails(
+            job_requirement="Cross-functional collaboration",
+            topic_id="topic-msft",
+            evidence=evidence,
+        )
+        mapping = EvidenceMapping(
+            evidence_with_details=ev_details,
+            resume_reference=None,
+            mapping_status="UNMATCHED",
+            reasoning="Not in current resume",
+        )
+        state = {
+            "evidence_mapping": EvidenceMappingResult(evidence_mappings=[mapping]),
+        }
+
+        # Simulate LLM erroneously outputting type='projects' because it saw project_name="Telemetry Aggregator"
+        llm_erroneous_unmatched = TailorUnmatchedList(
+            tailor_unmatched=[
+                TailorUnmatched(
+                    decisions=[
+                        TailorDecisionUnmatched(
+                            action="ADD",
+                            new_bullet=ResumeBullet(text="Built cross-team bridge", sentence_id=1),
+                            reasoning="Supports requirement",
+                            evidence=["Engineered cross-team data bridge"],
+                        )
+                    ],
+                    type="projects",  # Erroneous LLM output!
+                    project_name="Telemetry Aggregator",
+                    company_name=None,
+                    job_title=None,
+                    topic_id="topic-msft",
+                )
+            ]
+        )
+
+        with patch("agent.nodes.tailor_agent.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_unmatched_structured = MagicMock()
+            mock_unmatched_structured.ainvoke = AsyncMock(return_value=llm_erroneous_unmatched)
+            mock_matched_structured = MagicMock()
+
+            def mock_with_structured(schema):
+                if schema == TailorUnmatchedList:
+                    return mock_unmatched_structured
+                return mock_matched_structured
+
+            mock_llm.with_structured_output.side_effect = mock_with_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await tailor_resume_bullet_points(state)
+
+        tailored = res["tailor_analysis"].tailor_unmatched_list[0]
+        # Provenance lock must have overridden LLM's 'projects' drift back to 'work_experience'
+        self.assertEqual(tailored.type, "work_experience")
+        self.assertEqual(tailored.company_name, "Microsoft")
+        self.assertEqual(tailored.job_title, "SWE Intern")
+        self.assertEqual(tailored.duration, "Summer 2024")
+        self.assertEqual(tailored.job_location, "Redmond, WA")
+        self.assertIsNone(tailored.project_name)
+
+    async def test_tailor_unmatched_provenance_lock_leadership(self):
+        """Test tailor_resume_bullet_points enforces type='leadership' and title/position even if LLM guessed project."""
+        evidence = Evidence(
+            experience_type="leadership",
+            leadership_title="ACM Student Chapter",
+            leadership_position="President",
+            duration="2023 - 2024",
+            experience_found=["Led 50-member technical society"],
+        )
+        ev_details = EvidenceWithDetails(
+            job_requirement="Leadership and mentoring",
+            topic_id="topic-acm",
+            evidence=evidence,
+        )
+        mapping = EvidenceMapping(
+            evidence_with_details=ev_details,
+            resume_reference=None,
+            mapping_status="UNMATCHED",
+            reasoning="Not in current resume",
+        )
+        state = {
+            "evidence_mapping": EvidenceMappingResult(evidence_mappings=[mapping]),
+        }
+
+        llm_erroneous_unmatched = TailorUnmatchedList(
+            tailor_unmatched=[
+                TailorUnmatched(
+                    decisions=[
+                        TailorDecisionUnmatched(
+                            action="ADD",
+                            new_bullet=ResumeBullet(text="Directed organization operations", sentence_id=2),
+                            reasoning="Mentoring demonstrated",
+                            evidence=["Led 50-member technical society"],
+                        )
+                    ],
+                    type="projects",
+                    project_name="ACM Chapter",
+                    topic_id="topic-acm",
+                )
+            ]
+        )
+
+        with patch("agent.nodes.tailor_agent.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_unmatched_structured = MagicMock()
+            mock_unmatched_structured.ainvoke = AsyncMock(return_value=llm_erroneous_unmatched)
+            mock_matched_structured = MagicMock()
+
+            def mock_with_structured(schema):
+                if schema == TailorUnmatchedList:
+                    return mock_unmatched_structured
+                return mock_matched_structured
+
+            mock_llm.with_structured_output.side_effect = mock_with_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await tailor_resume_bullet_points(state)
+
+        tailored = res["tailor_analysis"].tailor_unmatched_list[0]
+        self.assertEqual(tailored.type, "leadership")
+        self.assertEqual(tailored.leadership_title, "ACM Student Chapter")
+        self.assertEqual(tailored.leadership_position, "President")
+        self.assertEqual(tailored.duration, "2023 - 2024")
+        self.assertIsNone(tailored.project_name)

@@ -14,6 +14,7 @@ import {
   Info,
   Loader2,
   PanelRightClose,
+  MessageSquare,
 } from "lucide-react";
 
 export type ExperienceTabType = "work_experience" | "project" | "leadership" | "other";
@@ -22,6 +23,7 @@ interface LiveEvidenceFormProps {
   metadata: ExperienceMetadata | null;
   isLoading: boolean;
   highlightErrors?: boolean;
+  hasUserReplied?: boolean;
   onSaveMetadata: (metadata: ExperienceMetadata) => Promise<void>;
   onResetTopicExperience: (newExperienceType: ExperienceTabType) => Promise<void>;
   onClose?: () => void;
@@ -31,10 +33,24 @@ export function LiveEvidenceForm({
   metadata,
   isLoading,
   highlightErrors = false,
+  hasUserReplied = false,
   onSaveMetadata,
   onResetTopicExperience,
   onClose,
 }: LiveEvidenceFormProps) {
+  // An experience is considered unanchored at the start of a probing conversation
+  // when no metadata entity has been established and the user has not chatted with the bot yet.
+  const hasEntityIdentity = Boolean(
+    metadata?.company?.trim() ||
+    metadata?.project_name?.trim() ||
+    metadata?.leadership_title?.trim() ||
+    metadata?.other_title?.trim() ||
+    metadata?.job_title?.trim() ||
+    metadata?.role?.trim()
+  );
+
+  const isAwaitingConversation = !hasEntityIdentity && !hasUserReplied;
+
   // Determine current active tab
   const activeTab: ExperienceTabType =
     metadata?.experience_type || "work_experience";
@@ -97,7 +113,7 @@ export function LiveEvidenceForm({
   };
 
   const handleTabClick = (tab: ExperienceTabType) => {
-    if (tab === activeTab) return;
+    if (isAwaitingConversation || tab === activeTab) return;
 
     // If an experience is already anchored with fields or conversation, warn before clearing
     const hasExistingContent = Boolean(
@@ -130,8 +146,6 @@ export function LiveEvidenceForm({
     activeTab === "work_experience" && highlightErrors && !draft.job_title?.trim();
   const isProjMissingName =
     activeTab === "project" && highlightErrors && !draft.project_name?.trim();
-  const isProjMissingRole =
-    activeTab === "project" && highlightErrors && !draft.role?.trim();
   const isLeadMissingTitle =
     activeTab === "leadership" && highlightErrors && !draft.leadership_title?.trim();
   const isLeadMissingPosition =
@@ -148,9 +162,6 @@ export function LiveEvidenceForm({
             <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
               Live Experience Identity
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-              Single Entity
-            </span>
           </div>
           <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
             Anchors this requirement to one experience. Updates sync to the chatbot.
@@ -161,7 +172,7 @@ export function LiveEvidenceForm({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!isDirty || isSaving || isLoading}
+            disabled={isAwaitingConversation || !isDirty || isSaving || isLoading}
             className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             {isSaving ? (
@@ -191,11 +202,16 @@ export function LiveEvidenceForm({
       <div className="flex border-b border-stone-200 dark:border-stone-800 bg-stone-100/70 dark:bg-stone-800/70 p-1 gap-1">
         <button
           type="button"
+          disabled={isAwaitingConversation}
           onClick={() => handleTabClick("work_experience")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
-            activeTab === "work_experience"
-              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50"
+            isAwaitingConversation
+              ? activeTab === "work_experience"
+                ? "bg-white/60 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 cursor-not-allowed border border-dashed border-stone-300 dark:border-stone-700"
+                : "text-stone-400 dark:text-stone-600 cursor-not-allowed opacity-50"
+              : activeTab === "work_experience"
+              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs cursor-pointer"
+              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50 cursor-pointer"
           }`}
         >
           <Briefcase className="h-3.5 w-3.5" />
@@ -204,11 +220,16 @@ export function LiveEvidenceForm({
 
         <button
           type="button"
+          disabled={isAwaitingConversation}
           onClick={() => handleTabClick("project")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
-            activeTab === "project"
-              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50"
+            isAwaitingConversation
+              ? activeTab === "project"
+                ? "bg-white/60 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 cursor-not-allowed border border-dashed border-stone-300 dark:border-stone-700"
+                : "text-stone-400 dark:text-stone-600 cursor-not-allowed opacity-50"
+              : activeTab === "project"
+              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs cursor-pointer"
+              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50 cursor-pointer"
           }`}
         >
           <FolderGit2 className="h-3.5 w-3.5" />
@@ -217,11 +238,16 @@ export function LiveEvidenceForm({
 
         <button
           type="button"
+          disabled={isAwaitingConversation}
           onClick={() => handleTabClick("leadership")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
-            activeTab === "leadership"
-              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50"
+            isAwaitingConversation
+              ? activeTab === "leadership"
+                ? "bg-white/60 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 cursor-not-allowed border border-dashed border-stone-300 dark:border-stone-700"
+                : "text-stone-400 dark:text-stone-600 cursor-not-allowed opacity-50"
+              : activeTab === "leadership"
+              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs cursor-pointer"
+              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50 cursor-pointer"
           }`}
         >
           <Users2 className="h-3.5 w-3.5" />
@@ -230,11 +256,16 @@ export function LiveEvidenceForm({
 
         <button
           type="button"
+          disabled={isAwaitingConversation}
           onClick={() => handleTabClick("other")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
-            activeTab === "other"
-              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50"
+            isAwaitingConversation
+              ? activeTab === "other"
+                ? "bg-white/60 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 cursor-not-allowed border border-dashed border-stone-300 dark:border-stone-700"
+                : "text-stone-400 dark:text-stone-600 cursor-not-allowed opacity-50"
+              : activeTab === "other"
+              ? "bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 shadow-xs cursor-pointer"
+              : "text-stone-600 dark:text-stone-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/50 dark:hover:bg-stone-900/50 cursor-pointer"
           }`}
         >
           <Sparkles className="h-3.5 w-3.5" />
@@ -244,6 +275,23 @@ export function LiveEvidenceForm({
 
       {/* Form Inputs Container */}
       <div className="flex-1 p-4 overflow-y-auto space-y-3.5 text-xs">
+        {/* Guidance Callout when Awaiting Initial Conversation */}
+        {isAwaitingConversation && (
+          <div className="rounded-xl border border-sky-200 dark:border-sky-800/80 bg-sky-50/80 dark:bg-sky-950/40 p-3.5 space-y-1.5 text-sky-950 dark:text-sky-200 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2.5">
+              <MessageSquare className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 shrink-0" />
+              <div>
+                <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-100">
+                  Chat with the Interviewer First
+                </h4>
+                <p className="text-[11px] text-sky-800/80 dark:text-sky-300/80 mt-0.5 leading-relaxed">
+                  Answer the opening question in the chat to begin. Once you start describing what you worked on, the agent will automatically detect your experience type (Work, Project, Leadership) and unlock this form for live editing.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* WORK EXPERIENCE FIELDS */}
         {activeTab === "work_experience" && (
           <>
@@ -253,10 +301,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.company || ""}
                 onChange={(e) => updateField("company", e.target.value)}
                 placeholder="e.g. Stripe, Acme Corp"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isWorkMissingCompany
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -275,10 +324,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.job_title || ""}
                 onChange={(e) => updateField("job_title", e.target.value)}
                 placeholder="e.g. Senior Backend Engineer"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isWorkMissingTitle
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -298,10 +348,11 @@ export function LiveEvidenceForm({
                 </label>
                 <input
                   type="text"
+                  disabled={isAwaitingConversation}
                   value={draft.duration || ""}
                   onChange={(e) => updateField("duration", e.target.value)}
                   placeholder="e.g. 2022 - Present"
-                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
                 />
               </div>
 
@@ -311,10 +362,11 @@ export function LiveEvidenceForm({
                 </label>
                 <input
                   type="text"
+                  disabled={isAwaitingConversation}
                   value={draft.location || ""}
                   onChange={(e) => updateField("location", e.target.value)}
                   placeholder="e.g. San Francisco or Remote"
-                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
                 />
               </div>
             </div>
@@ -330,10 +382,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.project_name || ""}
                 onChange={(e) => updateField("project_name", e.target.value)}
                 placeholder="e.g. Distributed Key-Value Store"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isProjMissingName
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -348,24 +401,16 @@ export function LiveEvidenceForm({
 
             <div>
               <label className="block font-medium text-stone-700 dark:text-stone-300 mb-1">
-                Your Role <span className="text-rose-500 font-bold">*</span>
+                Your Role <span className="text-stone-400 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.role || ""}
                 onChange={(e) => updateField("role", e.target.value)}
                 placeholder="e.g. Creator & Lead Developer"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
-                  isProjMissingRole
-                    ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
-                    : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
-                }`}
+                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
               />
-              {isProjMissingRole && (
-                <p className="text-[11px] text-rose-500 mt-1 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Your Role is required to save evidence.
-                </p>
-              )}
             </div>
 
             <div>
@@ -374,6 +419,7 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.technologies?.join(", ") || ""}
                 onChange={(e) =>
                   setDraft((prev) => ({
@@ -385,7 +431,7 @@ export function LiveEvidenceForm({
                   }))
                 }
                 placeholder="e.g. Go, Raft, gRPC, Docker"
-                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
               />
             </div>
 
@@ -395,10 +441,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.duration || ""}
                 onChange={(e) => updateField("duration", e.target.value)}
                 placeholder="e.g. Fall 2023, 2024"
-                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
               />
             </div>
           </>
@@ -413,10 +460,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.leadership_title || ""}
                 onChange={(e) => updateField("leadership_title", e.target.value)}
                 placeholder="e.g. ACM Student Chapter, Hackathon Lead"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isLeadMissingTitle
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -435,10 +483,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.position || ""}
                 onChange={(e) => updateField("position", e.target.value)}
                 placeholder="e.g. President, Technical Director"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isLeadMissingPosition
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -458,10 +507,11 @@ export function LiveEvidenceForm({
                 </label>
                 <input
                   type="text"
+                  disabled={isAwaitingConversation}
                   value={draft.duration || ""}
                   onChange={(e) => updateField("duration", e.target.value)}
                   placeholder="e.g. 2022 - 2023"
-                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
                 />
               </div>
 
@@ -471,10 +521,11 @@ export function LiveEvidenceForm({
                 </label>
                 <input
                   type="text"
+                  disabled={isAwaitingConversation}
                   value={draft.location || ""}
                   onChange={(e) => updateField("location", e.target.value)}
                   placeholder="e.g. Berkeley, CA"
-                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                  className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
                 />
               </div>
             </div>
@@ -490,10 +541,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.other_title || ""}
                 onChange={(e) => updateField("other_title", e.target.value)}
                 placeholder="e.g. Open Source Contributor, Volunteer Dev"
-                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors ${
+                className={`w-full rounded-lg border px-3 py-2 text-xs bg-white dark:bg-stone-900 text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60 ${
                   isOtherMissingTitle
                     ? "border-rose-500 bg-rose-50/20 dark:bg-rose-950/20 focus:ring-rose-500"
                     : "border-stone-300 dark:border-stone-700 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
@@ -512,10 +564,11 @@ export function LiveEvidenceForm({
               </label>
               <input
                 type="text"
+                disabled={isAwaitingConversation}
                 value={draft.other_organization || ""}
                 onChange={(e) => updateField("other_organization", e.target.value)}
                 placeholder="e.g. Kubernetes Community, Red Cross"
-                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
               />
             </div>
 
@@ -525,10 +578,11 @@ export function LiveEvidenceForm({
               </label>
               <textarea
                 rows={2}
+                disabled={isAwaitingConversation}
                 value={draft.other_notes || ""}
                 onChange={(e) => updateField("other_notes", e.target.value)}
                 placeholder="Brief notes on what you did..."
-                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900"
+                className="w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-stone-400 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-stone-800/60"
               />
             </div>
           </>

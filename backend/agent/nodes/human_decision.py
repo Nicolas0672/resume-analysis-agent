@@ -118,6 +118,7 @@ def human_investigate_chat(state: AgentState):
             {"id": "skip", "label": "Skip Topic"},
         ],
         "experience_metadata": state.get("active_experience_metadata"),
+        "is_sufficient": state.get("is_sufficient", False),
     })
 
     if isinstance(payload, dict):
