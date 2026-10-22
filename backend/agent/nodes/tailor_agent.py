@@ -186,6 +186,18 @@ For every matched candidate, return resume_reference exactly as provided.
     Create only the number of bullets necessary to represent the relevant experience well.
     Use XYZ format when the evidence explicitly provides the accomplishment, metric/impact, and method. Otherwise, write a concise factual bullet.
     Keep bullets concise, specific, achievement-oriented, and ATS-friendly without forcing unsupported keywords.
+
+    Classification and Section Rules:
+    - If the evidence has experience_type="work_experience" or has company/job_title:
+      You MUST set type = "work_experience".
+      Even if the candidate worked on a named project or internal tool during their job/internship, it is STILL work experience, NOT a standalone project.
+      Set company_name = company, job_title = job_title. Set project_name = None.
+    - If the evidence has experience_type="leadership" or has leadership_title/leadership_position:
+      You MUST set type = "leadership".
+      Set leadership_title = leadership_title, leadership_position = leadership_position. Set company_name = None and project_name = None.
+    - If the evidence has experience_type="project" or is an independent/academic project:
+      You MUST set type = "projects".
+      Set project_name = project_name. Set company_name = None and job_title = None.
     """
         ),
         (
@@ -227,11 +239,44 @@ For every matched candidate, return resume_reference exactly as provided.
             )
         )
         if unmatched_result:
+            orig_ev_map = {
+                item["topic_id"]: item["evidence_with_details"].evidence
+                for item in unmatched
+                if item.get("evidence_with_details") and item["evidence_with_details"].evidence
+            }
+
             for unmatched_item in unmatched_result.tailor_unmatched:
                 if unmatched_item.topic_id not in unmatched_topic_id:
                     raise ValueError(
                         f"Invalid topic_id returned by LLM: {unmatched_item.topic_id}"
                     )
+
+                # Deterministic Provenance Lock: Enforce section type and identity fields from verified evidence
+                orig_ev = orig_ev_map.get(unmatched_item.topic_id)
+                if orig_ev:
+                    if orig_ev.experience_type == "work_experience" or (orig_ev.company and orig_ev.job_title):
+                        unmatched_item.type = "work_experience"
+                        unmatched_item.company_name = unmatched_item.company_name or orig_ev.company
+                        unmatched_item.job_title = unmatched_item.job_title or orig_ev.job_title
+                        unmatched_item.duration = unmatched_item.duration or orig_ev.duration
+                        unmatched_item.job_location = unmatched_item.job_location or orig_ev.job_location
+                        unmatched_item.project_name = None
+                    elif orig_ev.experience_type == "leadership" or (orig_ev.leadership_title and orig_ev.leadership_position):
+                        unmatched_item.type = "leadership"
+                        unmatched_item.leadership_title = unmatched_item.leadership_title or orig_ev.leadership_title
+                        unmatched_item.leadership_position = unmatched_item.leadership_position or orig_ev.leadership_position
+                        unmatched_item.duration = unmatched_item.duration or orig_ev.duration
+                        unmatched_item.job_location = unmatched_item.job_location or orig_ev.job_location
+                        unmatched_item.company_name = None
+                        unmatched_item.job_title = None
+                        unmatched_item.project_name = None
+                    elif orig_ev.experience_type == "project" or orig_ev.project_name:
+                        unmatched_item.type = "projects"
+                        unmatched_item.project_name = unmatched_item.project_name or orig_ev.project_name
+                        unmatched_item.duration = unmatched_item.duration or orig_ev.duration
+                        unmatched_item.job_location = unmatched_item.job_location or orig_ev.job_location
+                        unmatched_item.company_name = None
+                        unmatched_item.job_title = None
 
     tailor_analysis = TailorAnalysis(
         tailor_matched_list=matched_result.tailor_matched if matched_result else [],
@@ -445,9 +490,12 @@ def format_evidence_for_critic(evidence: EvidenceWithDetails) -> str:
     return f"""
 
 EXPERIENCE:
+Type: {safe(e.experience_type) if e else "Not provided"}
 Company: {safe(e.company) if e else "Not provided"}
 Job Title: {safe(e.job_title) if e else "Not provided"}
 Project: {safe(e.project_name) if e else "Not provided"}
+Leadership Organization: {safe(e.leadership_title) if e else "Not provided"}
+Leadership Position: {safe(e.leadership_position) if e else "Not provided"}
 Location: {safe(e.job_location) if e else "Not provided"}
 Duration: {safe(e.duration) if e else "Not provided"}
 

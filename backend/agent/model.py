@@ -91,8 +91,14 @@ class InterviewPlan(BaseModel):
     interview_plan: List[InterviewDetails]
 
 class Evidence(BaseModel):
-    project_name: str = Field(
-        description="Name of the project or experience. If the candidate does not provide a name, create a concise name using only established context."
+    experience_type: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
+        default=None,
+        description="The type of experience: 'work_experience', 'project', 'leadership', or 'other'."
+    )
+
+    project_name: Optional[str] = Field(
+        default=None,
+        description="Name of the project or experience, if applicable. If the candidate does not provide a name, create a concise name using only established context."
     )
 
     experience_found: Optional[list[str]] = Field(
@@ -135,6 +141,10 @@ class Evidence(BaseModel):
     job_location: Optional[str] = None
     duration: Optional[str] = None
 
+    leadership_title: Optional[str] = None
+    leadership_position: Optional[str] = None
+    other_title: Optional[str] = None
+
     candidate_statements: Optional[list[str]] = Field(
         default=None,
         description=(
@@ -143,10 +153,281 @@ class Evidence(BaseModel):
         )
     )
 
+class WorkExperienceMetadata(BaseModel):
+    experience_type: Literal["work_experience"] = Field(
+        default="work_experience",
+        description="Must be 'work_experience'."
+    )
+    company: str = Field(
+        default=None,
+        description="Company / employer name (REQUIRED for work experience)."
+    )
+    job_title: str = Field(
+        default=None,
+        description="Role or job title (REQUIRED for work experience)."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates (e.g. 'June 2022 - Aug 2023', '2024')."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+
+class ProjectMetadata(BaseModel):
+    experience_type: Literal["project"] = Field(
+        default="project",
+        description="Must be 'project'."
+    )
+    project_name: str = Field(
+        default=None,
+        description="Name of the project (REQUIRED for project)."
+    )
+    role: Optional[str] = Field(
+        default=None,
+        description="Candidate's role in the project e.g. Lead Developer, Creator."
+    )
+    technologies: Optional[list[str]] = Field(
+        default=None,
+        description="Key technologies or tools explicitly mentioned for this project."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or duration (e.g. 'Fall 2023', '3 months')."
+    )
+
+class LeadershipMetadata(BaseModel):
+    experience_type: Literal["leadership"] = Field(
+        default="leadership",
+        description="Must be 'leadership'."
+    )
+    leadership_title: str = Field(
+        default=None,
+        description="Organization, club, or initiative name (REQUIRED for leadership)."
+    )
+    position: str = Field(
+        default=None,
+        description="Position held e.g. President, Chair (REQUIRED for leadership)."
+    )
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+
+class OtherMetadata(BaseModel):
+    experience_type: Literal["other"] = Field(
+        default="other",
+        description="Must be 'other'."
+    )
+    other_title: str = Field(
+        default=None,
+        description="Title or concise name of the activity/experience (REQUIRED for other)."
+    )
+    other_organization: Optional[str] = None
+    other_role: Optional[str] = None
+    other_notes: Optional[str] = None
+
+class InitialExperienceMetadata(BaseModel):
+    experience_type: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
+        default=None,
+        description="The category of the single experience being explored: 'work_experience', 'project', 'leadership', or 'other'."
+    )
+    # Work Experience
+    company: Optional[str] = Field(
+        default=None,
+        description="Company / employer name (if work_experience)."
+    )
+    job_title: Optional[str] = Field(
+        default=None,
+        description="Role or job title (if work_experience)."
+    )
+    # Project
+    project_name: Optional[str] = Field(
+        default=None,
+        description="Name of the project (if project)."
+    )
+    role: Optional[str] = Field(
+        default=None,
+        description="Candidate's role in the project e.g. Lead Developer, Creator (if project)."
+    )
+    # Leadership
+    leadership_title: Optional[str] = Field(
+        default=None,
+        description="Organization, club, or initiative name (if leadership)."
+    )
+    position: Optional[str] = Field(
+        default=None,
+        description="Position held e.g. President, Chair (if leadership)."
+    )
+    # Other
+    other_title: Optional[str] = Field(
+        default=None,
+        description="Title or concise name of the activity/experience (if other)."
+    )
+    other_organization: Optional[str] = None
+    other_role: Optional[str] = None
+    other_notes: Optional[str] = None
+    # Shared optional fields
+    duration: Optional[str] = Field(
+        default=None,
+        description="Timeframe or dates (e.g. 'June 2022 - Aug 2023', '2024')."
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Geographic location or 'Remote'."
+    )
+    technologies: Optional[list[str]] = Field(
+        default=None,
+        description="Key technologies or tools explicitly mentioned for this experience."
+    )
+
+# Alias for backwards-compatibility and general typing
+ExperienceMetadata = InitialExperienceMetadata
+
+ALLOWED_KEYS_PER_TYPE = {
+    "work_experience": {"experience_type", "company", "job_title", "duration", "location"},
+    "project": {"experience_type", "project_name", "role", "technologies", "duration"},
+    "leadership": {"experience_type", "leadership_title", "position", "duration", "location"},
+    "other": {"experience_type", "other_title", "other_organization", "other_role", "other_notes"},
+}
+
 class InvestigateOutput(BaseModel):
-    need_more_info: bool = Field(description="If more context is needed to investigate candidate experience, return True, else False")
-    user_message: str = Field(description="Message to the user asking for more details/clarification or letting them know they've provided enough context")
-    evidence: Evidence | None
+    need_more_info: SkipJsonSchema[bool] = True
+    is_sufficient: bool = Field(
+        default=False,
+        description=(
+            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
+            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
+            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
+            "or indicated they did not use other tools). "
+            "Set to False if key pillars are still missing and further probing is genuinely needed."
+        )
+    )
+    user_message: str = Field(
+        description=(
+            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next probing question to investigate and gather evidence for the active objective and job requirement, "
+            "or politely directing them to switch tabs if their experience belongs to a different category. "
+            "The question MUST directly investigate and gather evidence for the active objective and job requirement, "
+            "bridging the candidate's stated experience back to the target skill."
+        )
+    )
+    experience_metadata: Optional[ExperienceMetadata] = Field(
+        default=None,
+        description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
+    )
+    evidence: Evidence | None = None
+
+class WorkInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    is_sufficient: bool = Field(
+        default=False,
+        description=(
+            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
+            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
+            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
+            "or indicated they did not use other tools). "
+            "Set to False if key pillars are still missing and further probing is genuinely needed."
+        )
+    )
+    user_message: str = Field(
+        description=(
+            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this work experience, or directing them to switch tabs if they "
+            "indicated this experience belongs to a different category (e.g. project, leadership, or other). "
+            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this work experience."
+        )
+    )
+    experience_metadata: Optional[WorkExperienceMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this work experience (company, job_title, duration, location). Do NOT extract project or leadership fields."
+    )
+    evidence: Evidence | None = None
+
+class ProjectInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    is_sufficient: bool = Field(
+        default=False,
+        description=(
+            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
+            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
+            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
+            "or indicated they did not use other tools). "
+            "Set to False if key pillars are still missing and further probing is genuinely needed."
+        )
+    )
+    user_message: str = Field(
+        description=(
+            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this project, or directing them to switch tabs if they "
+            "indicated this experience belongs to a different category (e.g. work experience, leadership, or other). "
+            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this project."
+        )
+    )
+    experience_metadata: Optional[ProjectMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this project (project_name, role, technologies, duration). Do NOT extract work or leadership fields."
+    )
+    evidence: Evidence | None = None
+
+class LeadershipInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    is_sufficient: bool = Field(
+        default=False,
+        description=(
+            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
+            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
+            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
+            "or indicated they did not use other tools). "
+            "Set to False if key pillars are still missing and further probing is genuinely needed."
+        )
+    )
+    user_message: str = Field(
+        description=(
+            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this leadership experience, or directing them to switch tabs if they "
+            "indicated this experience belongs to a different category (e.g. work experience, project, or other). "
+            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this leadership experience."
+        )
+    )
+    experience_metadata: Optional[LeadershipMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this leadership experience (leadership_title, position, duration, location). Do NOT extract work or project fields."
+    )
+    evidence: Evidence | None = None
+
+class OtherInvestigateOutput(BaseModel):
+    need_more_info: SkipJsonSchema[bool] = True
+    is_sufficient: bool = Field(
+        default=False,
+        description=(
+            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
+            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
+            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
+            "or indicated they did not use other tools). "
+            "Set to False if key pillars are still missing and further probing is genuinely needed."
+        )
+    )
+    user_message: str = Field(
+        description=(
+            "Message to user asking the next question about this experience, or directing them to switch tabs if they "
+            "indicated this experience belongs to a different category. "
+            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this other experience."
+        )
+    )
+    experience_metadata: Optional[OtherMetadata] = Field(
+        default=None,
+        description="Identity details strictly for this other experience (other_title, other_organization, other_role, other_notes)."
+    )
+    evidence: Evidence | None = None
+
+SCOPED_INVESTIGATE_OUTPUT_MAP = {
+    "work_experience": WorkInvestigateOutput,
+    "project": ProjectInvestigateOutput,
+    "leadership": LeadershipInvestigateOutput,
+    "other": OtherInvestigateOutput,
+}
 
 # Not created from LLM. Manually created from evidence extracted
 class EvidenceWithDetails(BaseModel):
@@ -195,20 +476,20 @@ class TailorDecisionUnmatched(BaseModel):
 class TailorUnmatched(BaseModel):
     decisions: list[TailorDecisionUnmatched]
     type: Literal["leadership", "work_experience", "projects"]
-    company_name: Optional[str] = Field("Company name if experience learned from work. Otherwise return None")
-    duration: Optional[str] = Field("Duration of work experience if provided. Example: Dec 2024 - Present")
-    job_location: Optional[str]
-    job_title: Optional[str] = Field("Job title at company if experienced learned from work. Otherwise return None")
-    skills: Optional[list[str]] = Field("List of technologies or skills that was used from the experience")
-    project_name: Optional[str] = Field("Project name where experience was learned. Return None if experience was learned from work")
+    company_name: Optional[str] = Field(default=None, description="Company name if experience learned from work. Otherwise return None")
+    duration: Optional[str] = Field(default=None, description="Duration of work experience if provided. Example: Dec 2024 - Present")
+    job_location: Optional[str] = None
+    job_title: Optional[str] = Field(default=None, description="Job title at company if experienced learned from work. Otherwise return None")
+    skills: Optional[list[str]] = Field(default=None, description="List of technologies or skills that was used from the experience")
+    project_name: Optional[str] = Field(default=None, description="Project name where experience was learned. Return None if experience was learned from work")
     topic_id: str = Field(
         description=(
             "Copy the topic_id from the corresponding input exactly. "
             "Never modify, generate, or invent a topic_id."
         )
     )
-    leadership_position: Optional[str] 
-    leadership_title: Optional[str]
+    leadership_position: Optional[str] = None
+    leadership_title: Optional[str] = None
     
 class TailorMatchList(BaseModel):
     tailor_matched: List[TailorMatched]

@@ -48,6 +48,7 @@ export default function WorkspacePage() {
     activeTopicId,
     activeInterrupt,
     investigationMessages,
+    activeExperienceMetadata,
     tailorAnalysis,
     feedbacks,
     appliedTopicIds,
@@ -55,6 +56,8 @@ export default function WorkspacePage() {
     handleSelectAction,
     handleSelectTopic,
     handleSubmitAnswer,
+    handleSaveFormMetadata,
+    handleResetTopicChat,
     handleProceedToTailoring,
     handleApplyTailoring,
     handleCustomTailoring,
@@ -176,9 +179,12 @@ export default function WorkspacePage() {
                 evidenceWithDetails={evidenceWithDetails}
                 activeTopicId={activeTopicId}
                 investigationMessages={investigationMessages}
+                activeExperienceMetadata={activeExperienceMetadata}
                 isLoading={isLoading}
                 onSelectTopic={handleSelectTopic}
                 onSubmitAnswer={handleSubmitAnswer}
+                onSaveMetadata={handleSaveFormMetadata}
+                onResetTopicExperience={handleResetTopicChat}
                 onProceedToTailoring={handleProceedToTailoring}
               />
             )}

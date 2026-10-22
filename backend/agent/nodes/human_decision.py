@@ -61,14 +61,51 @@ def human_after_interview_planner(state: AgentState):
             "proceed_to_tailor_resume": True
         }
 
+    # Smart Pre-population: Check if selected topic links to an existing resume entry
+    topic_id = decision
+    prepopulated_metadata = None
+    if plan and getattr(plan, "interview_plan", None):
+        selected_topic = next((item for item in plan.interview_plan if item.topic_id == topic_id), None)
+        if selected_topic and selected_topic.relevant_experience_from_resume and state.get("resume_data"):
+            for ref in selected_topic.relevant_experience_from_resume:
+                entries = getattr(state["resume_data"], ref.type, [])
+                entry = next((e for e in entries if getattr(e, "entry_id", None) == ref.entry_id), None)
+                if entry:
+                    if ref.type == "work_experience":
+                        prepopulated_metadata = {
+                            "experience_type": "work_experience",
+                            "company": getattr(entry, "company", None),
+                            "job_title": getattr(entry, "job_title", None),
+                            "duration": getattr(entry, "duration", None),
+                            "location": getattr(entry, "location", None),
+                        }
+                    elif ref.type == "projects":
+                        prepopulated_metadata = {
+                            "experience_type": "project",
+                            "project_name": getattr(entry, "project_name", None),
+                            "role": getattr(entry, "role", None),
+                            "duration": getattr(entry, "duration", None),
+                            "technologies": getattr(entry, "technologies", None),
+                        }
+                    elif ref.type == "leadership":
+                        prepopulated_metadata = {
+                            "experience_type": "leadership",
+                            "leadership_title": getattr(entry, "title", None),
+                            "position": getattr(entry, "position", None),
+                            "duration": getattr(entry, "duration", None),
+                            "location": getattr(entry, "location", None),
+                        }
+                    break
+
     return {
         "topic_id_selection": decision,
-        "proceed_to_tailor_resume": False
-
+        "proceed_to_tailor_resume": False,
+        "human_investigate_action": "chat",
+        "active_experience_metadata": prepopulated_metadata,
     }
 
 def human_investigate_chat(state: AgentState):
-    answer = interrupt({
+    payload = interrupt({
         "stage": "investigation",
         "type": "investigation_chat",
         "message": (
@@ -76,9 +113,31 @@ def human_investigate_chat(state: AgentState):
             if state["investigation_messages"]
             else "No previous conversation available as of current"
         ),
-        "options": [],
+        "options": [
+            {"id": "conclude", "label": "Wrap Up & Save Evidence"},
+            {"id": "skip", "label": "Skip Topic"},
+        ],
+        "experience_metadata": state.get("active_experience_metadata"),
+        "is_sufficient": state.get("is_sufficient", False),
     })
 
-    return {
-        "investigation_messages": [HumanMessage(content=answer)]
+    if isinstance(payload, dict):
+        action = payload.get("action", "chat")
+        message = payload.get("message", "")
+        form_data = payload.get("form_data")
+    else:
+        action = "chat"
+        message = str(payload) if payload is not None else ""
+        form_data = None
+
+    result = {
+        "human_investigate_action": action,
     }
+
+    if form_data:
+        result["active_experience_metadata"] = form_data
+
+    if message and str(message).strip():
+        result["investigation_messages"] = [HumanMessage(content=str(message).strip())]
+
+    return result

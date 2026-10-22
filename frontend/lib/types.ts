@@ -127,7 +127,8 @@ export interface InterviewPlan {
 }
 
 export interface Evidence {
-  project_name: string;
+  experience_type?: "work_experience" | "project" | "leadership" | "other" | null;
+  project_name?: string | null;
   experience_found?: string[] | null;
   technologies?: string[] | null;
   ownership?: string[] | null;
@@ -139,6 +140,9 @@ export interface Evidence {
   job_title?: string | null;
   job_location?: string | null;
   duration?: string | null;
+  leadership_title?: string | null;
+  leadership_position?: string | null;
+  other_title?: string | null;
   candidate_statements?: string[] | null;
 }
 
@@ -224,10 +228,29 @@ export interface InterruptOption {
   job_requirement?: string;
 }
 
+export interface ExperienceMetadata {
+  experience_type?: "work_experience" | "project" | "leadership" | "other" | null;
+  company?: string | null;
+  job_title?: string | null;
+  project_name?: string | null;
+  role?: string | null;
+  leadership_title?: string | null;
+  position?: string | null;
+  other_title?: string | null;
+  other_organization?: string | null;
+  other_role?: string | null;
+  other_notes?: string | null;
+  duration?: string | null;
+  location?: string | null;
+  technologies?: string[] | null;
+}
+
 export interface InterruptPayload {
   type: "candidate_review" | "investigation_selection" | "investigation_chat" | string;
   message: string;
   options: InterruptOption[];
+  experience_metadata?: ExperienceMetadata | null;
+  is_sufficient?: boolean;
 }
 
 export interface RawInterrupt {

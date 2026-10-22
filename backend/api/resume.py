@@ -1,3 +1,4 @@
+import json
 import uuid
 import zipfile
 from io import BytesIO
@@ -6,7 +7,13 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, D
 from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
-from agent.graph_service import get_session_state, initialize_tailoring_session, resume_tailoring_session
+from agent.graph_service import (
+    clear_active_topic_investigation,
+    get_session_state,
+    initialize_tailoring_session,
+    resume_tailoring_session,
+    resume_tailoring_session_stream,
+)
 from model.job_pydantic import (
     AddBulletRequest,
     AddEntryRequest,
@@ -144,24 +151,105 @@ async def upload_resume(
 @router.post("/chat")
 async def chat(
     session_id: str = Form(...),
-    user_message: str = Form(...),
+    user_message: str = Form(""),
+    action: Optional[str] = Form(None),
+    form_data: Optional[str] = Form(None),
     request: Request = None,
     current_user: dict = Depends(get_current_user),
 ):
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")
-    if not user_message:
-        raise HTTPException(status_code=400, detail="User message is required")
+    if not user_message and not action and not form_data:
+        raise HTTPException(status_code=400, detail="User message, action, or form data is required")
 
     # Authorize session ownership before touching LangGraph checkpointer
     await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
 
+    parsed_form_data = None
+    if form_data:
+        try:
+            parsed_form_data = json.loads(form_data)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid form_data JSON format")
+
     response = await resume_tailoring_session(
-        session_id=session_id, user_message=user_message, request=request
+        session_id=session_id,
+        user_message=user_message,
+        action=action,
+        form_data=parsed_form_data,
+        request=request,
     )
 
     return {
         "message": "Message processed successfully",
+        "ai_response": response,
+    }
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    session_id: str = Form(...),
+    user_message: str = Form(""),
+    action: Optional[str] = Form(None),
+    form_data: Optional[str] = Form(None),
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+    if not user_message and not action and not form_data:
+        raise HTTPException(status_code=400, detail="User message, action, or form data is required")
+
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+
+    parsed_form_data = None
+    if form_data:
+        try:
+            parsed_form_data = json.loads(form_data)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid form_data JSON format")
+
+    async def event_generator():
+        async for chunk in resume_tailoring_session_stream(
+            session_id=session_id,
+            user_message=user_message,
+            action=action,
+            form_data=parsed_form_data,
+            request=request,
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/reset-topic-chat")
+async def reset_topic_chat(
+    session_id: str = Form(...),
+    new_experience_type: Optional[str] = Form(None),
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+
+    response = await clear_active_topic_investigation(
+        session_id=session_id,
+        new_experience_type=new_experience_type,
+        request=request,
+    )
+
+    return {
+        "message": "Topic chat reset successfully",
         "ai_response": response,
     }
 
