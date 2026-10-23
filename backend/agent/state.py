@@ -5,7 +5,7 @@ from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
 
 from agent.model import CandidateAnalysis, Evidence, EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks,InterviewPlan, TailorAnalysis
-from model.job_pydantic import JobDetails, ResumeStructure
+from model.resume_schema import JobDetails, ResumeStructure
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]

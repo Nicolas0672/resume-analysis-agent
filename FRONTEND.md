@@ -61,7 +61,7 @@ graph LR
 #### 1.2 Split Verification Dashboard
 Once ingestion and candidate analysis complete, the view transitions into a 2-column verification dashboard:
 * **Left Column: Structured Job Card**:
-  * Displays parsed [`JobDetails`](file:///D:/Documents/resume-agent/backend/model/job_pydantic.py#L7-L30) (`job_title`, `job_company`, `job_location`, core responsibilities, key requirements tags).
+  * Displays parsed [`JobDetails`](file:///D:/Documents/resume-agent/backend/model/resume_schema.py#L11-L30) (`job_title`, `job_company`, `job_location`, core responsibilities, key requirements tags).
   * Candidate immediately verifies that the scraper or validator captured the correct job posting.
 * **Right Column: Candidate Fit Assessment**:
   * Fit Rating Badge (`Strong Match`, `Good Match`, or `Weak Match`).

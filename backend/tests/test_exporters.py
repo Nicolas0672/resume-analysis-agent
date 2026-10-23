@@ -2,7 +2,7 @@ import io
 import pytest
 from docx import Document
 
-from model.job_pydantic import (
+from model.resume_schema import (
     ResumeBullet,
     ResumeEducation,
     ResumeExperience,

@@ -399,7 +399,7 @@ export interface UpdateResumeResponse {
 
 export interface AddEntryResponse {
   status: "added" | "invalid_section" | "not_found";
-  entry?: any;
+  entry?: unknown;
   resume_to_edit?: ResumeStructure;
 }
 

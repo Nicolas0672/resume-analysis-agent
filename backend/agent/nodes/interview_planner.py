@@ -5,7 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
-async def interview_agent(state: AgentState):
+async def plan_interview(state: AgentState):
     candidate_analysis = state.get('candidate_analysis', None)
     
     fields = ["job_title", "job_responsibilities", "job_requirements", "job_company"]

@@ -4,7 +4,16 @@ import unittest
 
 os.environ["OPENAI_API_KEY"] = "test-key"
 
-from model.job_pydantic import (
+from agent.model import (
+    TailorAnalysis,
+    TailorDecisionUnmatched,
+    TailorUnmatched,
+)
+from core.concurrency import (
+    session_lock,
+    session_locks,
+)
+from model.resume_schema import (
     ResumeBullet,
     ResumeCertification,
     ResumeEducation,
@@ -14,30 +23,28 @@ from model.job_pydantic import (
     ResumeSkills,
     ResumeStructure,
 )
-from agent.model import (
-    TailorAnalysis,
-    TailorUnmatched,
-    TailorDecisionUnmatched,
-)
-from services.helper import (
-    assign_entry_ids,
-    get_duration_sort_key,
-    get_next_entry_id,
-    get_next_sentence_id,
-    insert_entry_in_reverse_chronological_order,
-    session_lock,
-    session_locks,
-)
-from services.resume_service import (
-    add_resume_bullet,
-    add_resume_entry,
-    apply_tailored_bullets,
+from services.canvas_service import (
+    add_bullet,
+    add_entry,
     delete_bullet,
     delete_entry,
-    edit_resume_bullets,
-    edit_resume_skills,
-    update_full_resume,
-    update_resume_entry,
+    edit_bullet,
+    edit_entry,
+    edit_skills,
+    sync_resume,
+)
+from services.date_sorter import (
+    get_duration_sort_key,
+    insert_entry_in_reverse_chronological_order,
+)
+from services.id_generator import (
+    assign_entry_ids,
+    get_next_entry_id,
+    get_next_sentence_id,
+)
+from services.tailoring_service import (
+    apply_tailored_topic,
+    edit_tailored_proposal_bullet,
 )
 
 
@@ -161,7 +168,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.request = MockRequest(self.state)
 
     async def test_update_resume_entry_work_experience(self):
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=0,
@@ -182,7 +189,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(exp.location, "San Francisco, CA")
 
     async def test_update_resume_entry_education(self):
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=2,
@@ -201,7 +208,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(edu.coursework, ["Machine Learning", "Distributed Systems"])
 
     async def test_add_resume_bullet(self):
-        res = await add_resume_bullet(
+        res = await add_bullet(
             session_id="test_session",
             request=self.request,
             entry_id=0,
@@ -214,7 +221,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(res["resume_to_edit"].work_experience[0].bullets), 3)
 
     async def test_update_resume_entry_project(self):
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=3,
@@ -231,7 +238,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(proj.technologies, ["Next.js", "FastAPI", "Terraform"])
 
     async def test_update_resume_entry_leadership(self):
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=4,
@@ -246,7 +253,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lead.position, "Director of Logistics")
 
     async def test_update_resume_entry_certification(self):
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=5,
@@ -263,7 +270,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
     async def test_update_full_resume(self):
         mutated_resume = self.resume.model_copy(deep=True)
         mutated_resume.name = "Johnathan Doe"
-        res = await update_full_resume(
+        res = await sync_resume(
             session_id="test_session",
             request=self.request,
             resume_to_edit=mutated_resume,
@@ -335,7 +342,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
 
     async def test_add_resume_entry_reverse_chronological(self):
         # Existing work_experience: Acme (2021-2023) and Beta (2019-2021)
-        res = await add_resume_entry(
+        res = await add_entry(
             session_id="test_session",
             request=self.request,
             section_type="work_experience",
@@ -357,7 +364,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_resume_entry_resorts_when_duration_changes(self):
         # Beta Inc is entry_id=1, currently at index 1 with duration="2019 - 2021"
-        res = await update_resume_entry(
+        res = await edit_entry(
             session_id="test_session",
             request=self.request,
             entry_id=1,
@@ -398,7 +405,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
         )
         self.state["tailor_analysis"] = tailor_analysis
 
-        res = await apply_tailored_bullets(
+        res = await apply_tailored_topic(
             session_id="test_session",
             topic_id="topic-streaming",
             request=self.request,
@@ -414,7 +421,7 @@ class TestResumeMutations(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_mutations_no_lost_updates(self):
         # Fire 5 rapid concurrent bullet additions to the same session
         tasks = [
-            add_resume_bullet(
+            add_bullet(
                 session_id="concurrent_session",
                 request=self.request,
                 entry_id=0,
