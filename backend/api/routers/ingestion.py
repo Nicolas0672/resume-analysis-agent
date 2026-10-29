@@ -6,16 +6,19 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from pydantic import HttpUrl
 
 from agent.graph_service import initialize_tailoring_session
-from api.auth import get_current_user
-from repository.resume_repository import create_user_session
+from api.auth import get_current_user, verify_session_ownership
+from repository.resume_repository import create_user_session, get_file_path
 from services.analysis_service import prepare_resume_and_job_inputs
+from bucket.bucket import BucketStorageService
 
 router = APIRouter()
+bucket_service = BucketStorageService()
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_UNCOMPRESSED_SIZE = 50 * 1024 * 1024  # 50 MB
 MAX_COMPRESSION_RATIO = 100  # 100:1
 CHUNK_SIZE = 1024 * 1024  # 1 MB
+RESUME_PREVIEW_TTL = 3600 # 60min
 
 
 @router.post("/upload")
@@ -76,17 +79,23 @@ async def upload_resume(
             detail="Invalid or corrupt DOCX archive.",
         )
 
+    file_path = bucket_service.build_resume_s3_key(session_id=session_id, user_id=current_user["id"], original_filename=file.filename)
+
+    await bucket_service.upload_file(destination_path=file_path, file_bytes=file_bytes, content_type="application/pdf")
+
     resume_data = await prepare_resume_and_job_inputs(
         file_bytes=file_bytes, job_url=str(job_link) if job_link else None, job_description=job_description
     )
 
     if not resume_data["success"]:
+        await bucket_service.delete_file(file_path=file_path)
         return {
             "success": False,
             "requires_job_description": resume_data["requires_job_description"],
             "error": resume_data["error"],
             "session_id": session_id,
         }
+        
 
     # Bind session ownership to the authenticated user in Supabase Postgres
     job_details = resume_data.get("job_details") or {}
@@ -98,6 +107,7 @@ async def upload_resume(
         user_id=current_user["id"],
         job_title=job_title,
         job_company=job_company,
+        s3_file_path=file_path
     )
 
     ai_response = await initialize_tailoring_session(
@@ -116,3 +126,17 @@ async def upload_resume(
         "job_details": resume_data["job_details"],
         "resume_data": resume_data["structured_resume"],
     }
+
+@router.post("/preview")
+async def preview_resume(session_id: str, current_user: dict = Depends(get_current_user)):
+
+    await verify_session_ownership(session_id=session_id, user_id=current_user["id"])
+    s3_file_path = get_file_path(session_id=session_id, user_id=current_user["id"])
+    preview_url = await bucket_service.get_download_url(file_path=s3_file_path, expires_in_seconds=RESUME_PREVIEW_TTL)
+
+    return {
+        "success": True,
+        "preview_url": preview_url
+    }
+
+

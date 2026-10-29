@@ -57,6 +57,7 @@ async def init_db():
                         user_id text not null,
                         job_title text,
                         job_company text,
+                        s3_file_path text,
                         created_at timestamp with time zone default now()
                     );
                     create index if not exists idx_user_sessions_user_id on user_sessions(user_id);
@@ -71,6 +72,7 @@ async def init_db():
 async def create_user_session(
     session_id: str,
     user_id: str,
+    s3_file_path: str,
     job_title: Optional[str] = None,
     job_company: Optional[str] = None,
 ) -> bool:
@@ -83,19 +85,46 @@ async def create_user_session(
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    insert into user_sessions (session_id, user_id, job_title, job_company)
-                    values (%s, %s, %s, %s)
+                    insert into user_sessions (session_id, user_id, job_title, job_company, s3_file_path)
+                    values (%s, %s, %s, %s, %s)
                     on conflict (session_id) do update set
                         job_title = coalesce(excluded.job_title, user_sessions.job_title),
+                        s3_file_path = coalesce(excluded.s3_file_path, user_sessions.s3_file_path),
                         job_company = coalesce(excluded.job_company, user_sessions.job_company);
                     """,
-                    (session_id, str(user_id), job_title, job_company),
+                    (session_id, str(user_id), job_title, job_company, s3_file_path),
                 )
             await conn.commit()
             return True
     except Exception as e:
         logger.error(f"Error creating user session in DB: {e}")
         return False
+
+async def get_file_path(session_id: str, user_id: str) -> str:
+    if not DATABASE_URL:
+        return True
+
+    try:
+        async with get_db_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    SELECT s3_file_path, user_id
+                    FROM user_sessions
+                    WHERE session_id = %s
+                    """,
+                    (session_id,),
+                )
+                row = await cur.fetchone()
+                if not row:
+                    return None
+                if (str(row[1]) != str(user_id)):
+                        logger.warning(f"Unauthorized s3_file_path access attempt for session {session_id}")
+                        return None
+                return row[0]
+    except Exception as e:
+        logger.error(f"Unable to retrieve s3_file_path: {e}")
+        return None
 
 
 async def check_session_owner(session_id: str, user_id: str) -> bool:
