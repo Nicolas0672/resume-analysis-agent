@@ -94,9 +94,9 @@ class TestUploadSecurity(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("compression ratio too high", response.json()["detail"])
 
-    @patch("api.resume.process_resume_analysis", new_callable=AsyncMock)
-    @patch("api.resume.create_user_session", new_callable=AsyncMock)
-    @patch("api.resume.initialize_tailoring_session", new_callable=AsyncMock)
+    @patch("api.routers.ingestion.prepare_resume_and_job_inputs", new_callable=AsyncMock)
+    @patch("api.routers.ingestion.create_user_session", new_callable=AsyncMock)
+    @patch("api.routers.ingestion.initialize_tailoring_session", new_callable=AsyncMock)
     def test_upload_accepts_valid_docx_under_10mb(
         self, mock_init, mock_create_sess, mock_analysis
     ):

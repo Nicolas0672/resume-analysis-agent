@@ -3,7 +3,7 @@ from typing import Annotated, List, Literal, Optional
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
-from model.job_pydantic import ResumeBullet
+from model.resume_schema import ResumeBullet
 
 class CandidateStrength(BaseModel):
     requirement: str

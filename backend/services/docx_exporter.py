@@ -8,7 +8,7 @@ from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Inches, Pt, RGBColor
 
-from model.job_pydantic import (
+from model.resume_schema import (
     ResumeEducation,
     ResumeExperience,
     ResumeLeadership,

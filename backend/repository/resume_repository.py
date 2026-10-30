@@ -1,7 +1,6 @@
 import os
 import logging
 from typing import Optional
-import psycopg
 from dotenv import load_dotenv
 from psycopg_pool import AsyncConnectionPool
 
@@ -13,20 +12,34 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 _pool: Optional[AsyncConnectionPool] = None
 
+
 async def init_db_pool():
+    """Initializes and opens the shared async connection pool."""
     global _pool
     _pool = AsyncConnectionPool(DATABASE_URL, min_size=2, max_size=10, open=False)
     await _pool.open()
 
+
 async def close_db_pool():
+    """Gracefully drains and closes all pool connections on application shutdown."""
     global _pool
     if _pool:
         await _pool.close()
 
-def get_pool():
+
+def get_db_connection():
+    """Borrows a warm, authenticated connection context manager from the singleton pool.
+    
+    Usage:
+        async with get_db_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(...)
+    """
     if _pool is None:
-        raise RuntimeError("Pool not initialized")
+        raise RuntimeError("Database connection pool is not initialized. Call init_db_pool() first.")
     return _pool.connection()
+
+
 
 async def init_db():
     """Ensure the user_sessions table and indexes exist in Supabase Postgres."""
@@ -35,7 +48,7 @@ async def init_db():
         return
 
     try:
-        async with get_pool() as conn:
+        async with get_db_connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
@@ -66,7 +79,7 @@ async def create_user_session(
         return False
 
     try:
-        async with get_pool() as conn:
+        async with get_db_connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
@@ -92,7 +105,7 @@ async def check_session_owner(session_id: str, user_id: str) -> bool:
         return True
 
     try:
-        async with get_pool() as conn:
+        async with get_db_connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
@@ -113,10 +126,9 @@ async def get_user_sessions(user_id: str) -> list[dict]:
     """Retrieve all tailoring sessions belonging to an authenticated user."""
     if not DATABASE_URL:
         return []
-    print(f"Fetching sessions for user_id: {user_id}")  # Debugging line
 
     try:
-        async with get_pool() as conn:
+        async with get_db_connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """

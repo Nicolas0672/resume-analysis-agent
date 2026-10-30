@@ -32,7 +32,7 @@ from agent.nodes.human_decision import human_after_interview_planner, human_inve
 from agent.nodes.interview import investigate_candidate, reset_investigation, validate_experience_metadata
 from agent.nodes.tailor_agent import tailor_resume_bullet_points
 from agent.graph_service import resume_tailoring_session
-from model.job_pydantic import ResumeExperience, ResumeStructure
+from model.resume_schema import ResumeExperience, ResumeStructure
 
 
 class MockInterrupt:
@@ -341,7 +341,7 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         mock_request.app.state.graph_with_memory = mock_graph
 
-        with patch("services.helper.session_lock"):
+        with patch("core.concurrency.session_lock"):
             res = await resume_tailoring_session(
                 session_id="test-session",
                 user_message="I handled deployment",

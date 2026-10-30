@@ -98,23 +98,19 @@ export async function sendChatMessage(
   action?: "chat" | "conclude" | "skip" | "form_update" | "reset_topic",
   formDataPayload?: Record<string, any> | null
 ): Promise<ChatResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("user_message", userMessage);
-  if (action) {
-    formData.append("action", action);
-  }
-  if (formDataPayload) {
-    formData.append("form_data", JSON.stringify(formDataPayload));
-  }
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/chat`, {
+  const response = await fetch(`${API_BASE}/interview/chat`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      user_message: userMessage,
+      action: action || null,
+      form_data: formDataPayload || null,
+    }),
   });
 
   if (!response.ok) {
@@ -144,23 +140,19 @@ export async function sendChatMessageStream(
   formDataPayload?: Record<string, any> | null,
   callbacks?: ChatStreamCallbacks
 ): Promise<any> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("user_message", userMessage);
-  if (action) {
-    formData.append("action", action);
-  }
-  if (formDataPayload) {
-    formData.append("form_data", JSON.stringify(formDataPayload));
-  }
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/chat/stream`, {
+  const response = await fetch(`${API_BASE}/interview/chat/stream`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      user_message: userMessage,
+      action: action || null,
+      form_data: formDataPayload || null,
+    }),
   });
 
   if (!response.ok) {
@@ -226,19 +218,17 @@ export async function resetTopicChat(
   sessionId: string,
   newExperienceType?: string
 ): Promise<ChatResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  if (newExperienceType) {
-    formData.append("new_experience_type", newExperienceType);
-  }
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/reset-topic-chat`, {
+  const response = await fetch(`${API_BASE}/interview/reset-topic`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      new_experience_type: newExperienceType || null,
+    }),
   });
 
   if (!response.ok) {
@@ -257,7 +247,7 @@ export async function resetTopicChat(
 
 export async function getSessionState(sessionId: string): Promise<SessionStateResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}`, {
+  const response = await fetch(`${API_BASE}/interview/session/${encodeURIComponent(sessionId)}`, {
     method: "GET",
     headers: {
       ...authHeaders,
@@ -282,17 +272,17 @@ export async function applyTailoring(
   sessionId: string,
   topicId: string
 ): Promise<ApplyTailoringResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("topic_id", topicId);
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/apply-tailoring`, {
+  const response = await fetch(`${API_BASE}/tailor/apply-topic`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      topic_id: topicId,
+    }),
   });
 
   if (!response.ok) {
@@ -315,19 +305,19 @@ export async function customTailoring(
   sentenceId: number,
   newText: string
 ): Promise<CustomTailoringResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("topic_id", topicId);
-  formData.append("sentence_id", sentenceId.toString());
-  formData.append("new_text", newText);
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/custom-tailoring`, {
+  const response = await fetch(`${API_BASE}/tailor/edit-proposal-bullet`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      topic_id: topicId,
+      sentence_id: sentenceId,
+      new_text: newText,
+    }),
   });
 
   if (!response.ok) {
@@ -349,18 +339,18 @@ export async function editResumeBullet(
   sentenceId: number,
   newText: string
 ): Promise<EditBulletResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("sentence_id", sentenceId.toString());
-  formData.append("new_text", newText);
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/edit-resume-bullets`, {
+  const response = await fetch(`${API_BASE}/canvas/edit-bullet`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      sentence_id: sentenceId,
+      new_text: newText,
+    }),
   });
 
   if (!response.ok) {
@@ -381,17 +371,17 @@ export async function deleteBullet(
   sessionId: string,
   sentenceId: number
 ): Promise<DeleteBulletResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("sentence_id", sentenceId.toString());
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/delete-bullet`, {
+  const response = await fetch(`${API_BASE}/canvas/delete-bullet`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      sentence_id: sentenceId,
+    }),
   });
 
   if (!response.ok) {
@@ -412,17 +402,17 @@ export async function deleteEntry(
   sessionId: string,
   entryId: number
 ): Promise<DeleteEntryResponse> {
-  const formData = new FormData();
-  formData.append("session_id", sessionId);
-  formData.append("entry_id", entryId.toString());
-
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/delete-entry`, {
+  const response = await fetch(`${API_BASE}/canvas/delete-entry`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: formData,
+    body: JSON.stringify({
+      session_id: sessionId,
+      entry_id: entryId,
+    }),
   });
 
   if (!response.ok) {
@@ -466,7 +456,7 @@ export async function editResumeEntry(
   payload: EditEntryPayload
 ): Promise<EditEntryResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/edit-entry`, {
+  const response = await fetch(`${API_BASE}/canvas/edit-entry`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -495,7 +485,7 @@ export async function addResumeBullet(
   text: string
 ): Promise<AddBulletResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/add-bullet`, {
+  const response = await fetch(`${API_BASE}/canvas/add-bullet`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -523,7 +513,7 @@ export async function editResumeSkills(
   skills: ResumeSkills
 ): Promise<EditSkillsResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/edit-skills`, {
+  const response = await fetch(`${API_BASE}/canvas/edit-skills`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -551,7 +541,7 @@ export async function updateFullResume(
   resumeToEdit: ResumeStructure
 ): Promise<UpdateResumeResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/update-resume`, {
+  const response = await fetch(`${API_BASE}/canvas/sync-resume`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -580,7 +570,7 @@ export async function addResumeEntry(
   entryData: Record<string, any>
 ): Promise<AddEntryResponse> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}/add-entry`, {
+  const response = await fetch(`${API_BASE}/canvas/add-entry`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -608,7 +598,7 @@ export async function addResumeEntry(
 }
 
 /**
- * Downloads the exported PDF or DOCX file directly from the 
+ * Downloads the exported PDF or DOCX file directly from the backend.
  */
 export async function downloadResumeFile(
   endpoint: "pdf" | "docx",
@@ -670,6 +660,3 @@ export async function exportResumeDocx(
 ): Promise<void> {
   return downloadResumeFile("docx", sessionId, candidateName);
 }
-
-
-

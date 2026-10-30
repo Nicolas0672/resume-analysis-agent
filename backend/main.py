@@ -1,20 +1,18 @@
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from agent.graph import graph
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
 from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-from fastapi import FastAPI
+from agent.graph import graph
 from api.resume import router as resume_router
-from fastapi.middleware.cors import CORSMiddleware
+from repository.resume_repository import close_db_pool, init_db, init_db_pool
 
-from repository.resume_repository import init_db, init_db_pool, close_db_pool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,14 +23,11 @@ async def lifespan(app: FastAPI):
 
     async with AsyncPostgresSaver.from_conn_string(DB_URI) as memory:
         await memory.setup()
-
-        app.state.graph_with_memory = graph.compile(
-            checkpointer=memory
-        )
-
+        app.state.graph_with_memory = graph.compile(checkpointer=memory)
         yield
 
     await close_db_pool()
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -43,8 +38,8 @@ app.add_middleware(
         "https://resume-analysis-agent-ten.vercel.app",
     ],
     allow_credentials=True,
-    allow_methods=["*"],            # GET, POST, etc.
-    allow_headers=["*"],            # all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(resume_router)

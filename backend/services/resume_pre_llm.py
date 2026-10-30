@@ -1,8 +1,8 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from model.job_pydantic import JobDetails, ResumeStructure
-from services.helper import assign_entry_ids
+from model.resume_schema import JobDetails, ResumeStructure
+from services.id_generator import assign_entry_ids
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 def get_model():
