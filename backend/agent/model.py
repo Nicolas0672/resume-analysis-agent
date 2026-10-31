@@ -340,6 +340,14 @@ class InvestigateOutput(BaseInvestigateOutput):
     )
 
 class WorkInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["project", "leadership", "other"]] = Field(
+        default=None,
+        description=(
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. personal/academic project -> 'project', club/activity -> 'leadership', other -> 'other'), specify that category here. "
+            "MUST be None if discussing any work experience, employment, or internship."
+        )
+    )
     user_message: str = Field(
         description=(
             "Conversational response to the candidate regarding this work experience: "
@@ -355,6 +363,14 @@ class WorkInvestigateOutput(BaseInvestigateOutput):
     )
 
 class ProjectInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "leadership", "other"]] = Field(
+        default=None,
+        description=(
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', club/activity -> 'leadership', other -> 'other'), specify that category here. "
+            "MUST be None if discussing projects."
+        )
+    )
     user_message: str = Field(
         description=(
             "Conversational response to the candidate regarding this project: "
@@ -370,6 +386,14 @@ class ProjectInvestigateOutput(BaseInvestigateOutput):
     )
 
 class LeadershipInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "project", "other"]] = Field(
+        default=None,
+        description=(
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', project -> 'project', other -> 'other'), specify that category here. "
+            "MUST be None if discussing leadership or clubs."
+        )
+    )
     user_message: str = Field(
         description=(
             "Conversational response to the candidate regarding this leadership experience: "
@@ -385,6 +409,14 @@ class LeadershipInvestigateOutput(BaseInvestigateOutput):
     )
 
 class OtherInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "project", "leadership"]] = Field(
+        default=None,
+        description=(
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', project -> 'project', club -> 'leadership'), specify that category here. "
+            "MUST be None if discussing other experiences."
+        )
+    )
     user_message: str = Field(
         description=(
             "Conversational response to the candidate regarding this experience: "

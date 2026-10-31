@@ -876,3 +876,83 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         # Ensure user_message instructs tab change and does NOT contain wrap up invite
         self.assertIn("Work Experience", res["investigation_messages"][0].content)
         self.assertNotIn("Wrap Up & Save Evidence", res["investigation_messages"][0].content)
+
+    def test_scoped_investigate_output_excludes_own_category(self):
+        """Ensure WorkInvestigateOutput excludes 'work_experience' and ProjectInvestigateOutput excludes 'project'."""
+        from agent.model import ProjectInvestigateOutput, LeadershipInvestigateOutput, OtherInvestigateOutput
+        
+        work_schema = WorkInvestigateOutput.model_json_schema()
+        work_tab_prop = work_schema["properties"]["suggested_experience_tab"]
+        work_enum = []
+        for item in work_tab_prop.get("anyOf", []):
+            if "enum" in item:
+                work_enum.extend(item["enum"])
+            elif "const" in item:
+                work_enum.append(item["const"])
+        self.assertNotIn("work_experience", work_enum)
+        self.assertIn("project", work_enum)
+
+        proj_schema = ProjectInvestigateOutput.model_json_schema()
+        proj_tab_prop = proj_schema["properties"]["suggested_experience_tab"]
+        proj_enum = []
+        for item in proj_tab_prop.get("anyOf", []):
+            if "enum" in item:
+                proj_enum.extend(item["enum"])
+            elif "const" in item:
+                proj_enum.append(item["const"])
+        self.assertNotIn("project", proj_enum)
+        self.assertIn("work_experience", proj_enum)
+
+    async def test_investigate_candidate_same_tab_does_not_loop_redirect(self):
+        """Ensure when candidate describes internship work on Work Experience tab, agent probes without looping redirect."""
+        from agent.model import WorkInvestigateOutput
+        topic = InterviewDetails(
+            topic_id="topic-api-2",
+            topic="REST API",
+            priority="High",
+            reason="Core backend requirement",
+            objective="Evaluate REST API development",
+            job_requirement="RESTful API design",
+            relevant_experience=["Acme Internship"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specific REST API details missing",
+        )
+        state = {
+            "topic_id_selection": "topic-api-2",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="At my Acme internship, I built REST APIs with FastAPI")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": {
+                "experience_type": "work_experience",
+                "company": "Acme",
+            },
+        }
+
+        # Mock LLM returning probing question with suggested_experience_tab=None
+        mock_output = WorkInvestigateOutput(
+            is_sufficient=False,
+            suggested_experience_tab=None,
+            user_message="At Acme, what specific endpoints did you design and how did you handle error validation?",
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+            # Check prompt contents passed to LLM
+            call_args = mock_structured.ainvoke.call_args[0][0]
+            system_prompt_content = call_args[0].content
+            self.assertIn("THIS IS THE CURRENT, CORRECT TAB! DO NOT suggest switching tabs.", system_prompt_content)
+            self.assertIn("CRITICAL TAB GUARDRAIL", system_prompt_content)
+
+        self.assertFalse(res["is_sufficient"])
+        self.assertIsNone(res["suggested_experience_tab"])
+        self.assertTrue(res["need_more_info"])
+        self.assertIn("endpoints", res["investigation_messages"][0].content)

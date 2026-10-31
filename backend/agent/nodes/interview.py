@@ -256,6 +256,8 @@ DO NOT ask any questions. Do not ask for more information.
 - Category: {type_display}
 - Entity: "{entity_name}"
 - Only explore evidence belonging strictly to this {type_display}.
+- IMPORTANT: If the candidate describes work that belongs to this {type_display} (e.g. discussing an internship or job when on Work Experience, or discussing a project when on Project):
+  THIS IS THE CURRENT, CORRECT TAB! DO NOT suggest switching tabs. Keep `suggested_experience_tab = None`. Warmly acknowledge their role/company and actively probe for concrete actions, technical methods, and impact relating to {{objective}} (State 4).
 - Populate `experience_metadata` ONLY with identity fields relevant to this {type_display}.
 """
     else:
@@ -333,7 +335,8 @@ STATE 1: TARGET EVIDENCE SUFFICIENT (Evidence Cleared)
 - USER MESSAGE: Warmly and concisely summarize the strong evidence gathered for "{{objective}}". Inform the candidate they have great material and can click "Wrap Up & Save Evidence" whenever ready. DO NOT ask any more questions. DO NOT end with a question mark.
 
 STATE 2: SKILL GAINED ELSEWHERE / TAB REDIRECTION (Experience Mismatch)
-- WHEN: The candidate mentions or indicates that the probed skill / requirement was gained or applied in a DIFFERENT experience, role, or category (e.g., "I developed REST APIs through my internship", "I did this in a personal project, not at work", "I gained that in a student club").
+- WHEN: The candidate mentions or indicates that the probed skill / requirement was gained or applied in a DIFFERENT category than the current active tab (e.g. candidate is on Project, but states "I developed REST APIs through my internship").
+- CRITICAL TAB GUARDRAIL: If the candidate is ALREADY on the matching tab (e.g. discussing an internship or job while currently in Work Experience), this state does NOT apply! DO NOT suggest switching tabs. Keep `suggested_experience_tab = None`. Proceed to State 4 (Probing) or State 1 (Sufficient).
 - SCHEMA ASSIGNMENT:
   - `is_sufficient = False` (MANDATORY: Evidence for this requirement is NOT yet gathered under its proper experience. Concluding now would cause the skill to be dropped downstream.)
   - `suggested_experience_tab = <category>` (Set to "work_experience" for jobs/internships, "project" for personal/class projects, "leadership" for clubs/activities, or "other").
@@ -384,10 +387,15 @@ STATE 4: IN PROGRESS / PROBING
         evidence_with_details=evidence_with_details
     ))
 
+    # Deterministic guard: If the LLM suggested the tab we are ALREADY on, it is NOT a redirect
+    suggested_tab = getattr(response, "suggested_experience_tab", None)
+    if suggested_tab == active_type:
+        suggested_tab = None
+
     # Merge newly detected metadata into active_metadata with strict whitelist sanitization
     merged_metadata = dict(active_metadata) if active_metadata else {}
     # Only merge metadata if NOT redirecting to another tab, to avoid polluting active form
-    if response.experience_metadata and not response.suggested_experience_tab:
+    if response.experience_metadata and not suggested_tab:
         new_data = response.experience_metadata.model_dump(exclude_none=True)
         # If experience_type is already locked, prevent LLM from changing it mid-investigation
         if merged_metadata.get("experience_type"):
@@ -406,7 +414,7 @@ STATE 4: IN PROGRESS / PROBING
         "investigation_messages": [AIMessage(content=response.user_message)],
         "need_more_info": True,
         "is_sufficient": bool(getattr(response, "is_sufficient", False)),
-        "suggested_experience_tab": getattr(response, "suggested_experience_tab", None),
+        "suggested_experience_tab": suggested_tab,
         "active_experience_metadata": merged_metadata or None,
     }
     
