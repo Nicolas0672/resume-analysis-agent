@@ -339,6 +339,28 @@ class InvestigateOutput(BaseInvestigateOutput):
         description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
     )
 
+class InitialInvestigateOutput(BaseInvestigateOutput):
+    """
+    Used strictly during Initial Experience Discovery when active_type is None.
+    Redirection is impossible because no active tab has been chosen yet.
+    """
+    suggested_experience_tab: Optional[Literal[None]] = Field(
+        default=None,
+        description="MUST be None during initial discovery because no active tab is established yet."
+    )
+    user_message: str = Field(
+        description=(
+            "Conversational opening question to discover which experience the candidate demonstrated this requirement in. "
+            "If relevant experiences are listed from their resume, warmly reference them and ask if they developed the skill there or elsewhere. "
+            "DO NOT suggest switching tabs because no active tab has been chosen yet. "
+            "Ask EXACTLY ONE high-leverage opening question."
+        )
+    )
+    experience_metadata: Optional[ExperienceMetadata] = Field(
+        default=None,
+        description="High-level identity of the single experience if mentioned by the candidate."
+    )
+
 class WorkInvestigateOutput(BaseInvestigateOutput):
     suggested_experience_tab: Optional[Literal["project", "leadership", "other"]] = Field(
         default=None,
