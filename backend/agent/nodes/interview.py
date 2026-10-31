@@ -46,6 +46,7 @@ def reset_investigation(state: AgentState):
         "human_investigate_action": "chat",
         "active_experience_metadata": None,
         "is_sufficient": False,
+        "suggested_experience_tab": None,
     }
 
 async def investigate_candidate(state: AgentState):
@@ -86,6 +87,7 @@ async def investigate_candidate(state: AgentState):
             "completed_topic_ids": [topic_id],
             "active_experience_metadata": None,
             "is_sufficient": True,
+            "suggested_experience_tab": None,
         }
 
     # Case 2: Human reset topic to switch experience type
@@ -117,7 +119,8 @@ Do not reference past conversation or past experiences.
                 AIMessage(content=response.user_message),
             ],
             "need_more_info": True,
-        "is_sufficient": bool(getattr(response, "is_sufficient", False)),
+            "is_sufficient": bool(getattr(response, "is_sufficient", False)),
+            "suggested_experience_tab": getattr(response, "suggested_experience_tab", None),
             "active_experience_metadata": active_metadata,
         }
 
@@ -150,7 +153,8 @@ Ask EXACTLY ONE question.
         return {
             "investigation_messages": [AIMessage(content=response.user_message)],
             "need_more_info": True,
-        "is_sufficient": bool(getattr(response, "is_sufficient", False)),
+            "is_sufficient": bool(getattr(response, "is_sufficient", False)),
+            "suggested_experience_tab": getattr(response, "suggested_experience_tab", None),
             "active_experience_metadata": active_metadata,
         }
 
@@ -231,6 +235,7 @@ DO NOT ask any questions. Do not ask for more information.
             "completed_topic_ids": [topic_id],
             "active_experience_metadata": None,
             "is_sufficient": True,
+            "suggested_experience_tab": None,
         }
 
     # Case 5: Human sent an answer to continue the conversation
@@ -247,26 +252,12 @@ DO NOT ask any questions. Do not ask for more information.
             or f"this {type_display}"
         )
         scoping_instructions = f"""
-### Category Focus & Mandatory Tab Redirection:
-- The current investigation is set to {type_display}: "{entity_name}".
-- Keep questions focused strictly on uncovering concrete evidence for "{{objective}}" within this {type_display}.
-
-### PRIORITY OVERRIDE — CATEGORY PIVOT OR CORRECTION:
-If the candidate indicates that they were confused, made a mistake, or states that their experience actually belongs to a DIFFERENT category (e.g., "actually it was from leadership", "actually this was a personal project, not work", "I didn't do this at my job"):
-1. DO NOT force them back to the active category (e.g. DO NOT say "Let's focus on {entity_name}").
-2. DO NOT ask another question about {entity_name}.
-3. IMMEDIATELY acknowledge their pivot warmly and explicitly tell them to switch to that tab on the right.
-   - If they mentioned leadership:
-     "Got it, thanks for clarifying! Since this section is currently set up for Work Experience, please switch over to the **Leadership** tab on the right so we can capture your leadership experience accurately."
-   - If they mentioned a project:
-     "Understood! Since this section is currently set up for Work Experience, please switch over to the **Project** tab on the right so we can explore that project."
-   - If they mentioned work experience:
-     "Understood! Please switch over to the **Work Experience** tab on the right."
-4. Leave `experience_metadata` as null or empty for any fields that belong to the other category so the active form is not corrupted.
-
-### Regular Category Guardrail:
-- When exploring {type_display}: "{entity_name}", keep questions focused strictly on concrete actions, ownership, and metrics for "{{objective}}" within this {type_display}.
-- If the candidate describes work clearly belonging to a different experience, STOP probing and politely instruct them to switch to the appropriate tab (Work Experience, Project, Leadership, or Other). Do not collect evidence from that experience or incorporate it into the active experience's metadata.
+### Current Active Experience Scope:
+- Category: {type_display}
+- Entity: "{entity_name}"
+- Only explore evidence belonging strictly to this {type_display}.
+- IMPORTANT: If the candidate describes work that belongs to this {type_display} (e.g. discussing an internship or job when on Work Experience, or discussing a project when on Project):
+  THIS IS THE CURRENT, CORRECT TAB! DO NOT suggest switching tabs. Keep `suggested_experience_tab = None`. Warmly acknowledge their role/company and actively probe for concrete actions, technical methods, and impact relating to {{objective}} (State 4).
 - Populate `experience_metadata` ONLY with identity fields relevant to this {type_display}.
 """
     else:
@@ -321,29 +312,55 @@ Every strong resume bullet point needs a balance of:
 - If the candidate answers with high-level theory, prompt for concrete specifics.
 - If the candidate answers with low-level implementation, lift them up to the impact, trade-offs, and outcomes.
 
-### Crucial Conversational Guardrails:
+### Conversational Guardrails:
 1. BREADTH OVER TRIVIA (NO TUNNEL VISION):
-   - NEVER drill down into routine boilerplate code, standard libraries, or trivial setup details (e.g. NEVER ask how Python standard logging was configured, how libraries were imported, or how cosine similarity formulas work).
+   - NEVER drill down into routine boilerplate code, standard libraries, or trivial setup details.
    - Once a choice is explained, do NOT keep asking "how did you implement that". Instead, PIVOT to Trade-offs or Measurable Impact relating to {{objective}}.
 2. NATURAL & ENGAGING DIALOGUE (NO ROBOTIC ECHOES):
    - NEVER start questions with formulaic, repetitive echoes like "You've mentioned...", "You described...", or "You've shared...".
    - Speak naturally like a senior engineering leader: direct, curious, and collaborative.
-3. SINGLE EXPERIENCE FOCUS & CATEGORY REDIRECTION:
-   - Only explore ONE experience entity per topic.
-   - If the candidate mentions an experience belonging to a different category or states they want to share an experience from another category, DO NOT force them to stay on the current entity. Warmly acknowledge it and direct them to switch to the corresponding tab on the right.
-4. IDENTITY GAPS:
-   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, ask for those details early while anchoring to {{objective}} (e.g. "What was your role at Microsoft, and what project best highlights your cross-functional collaboration?").
-5. ONE QUESTION AT A TIME:
+3. IDENTITY GAPS:
+   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, ask for those details early while anchoring to {{objective}}.
+4. ONE QUESTION AT A TIME:
    - Ask EXACTLY ONE thoughtful, high-leverage question at a time.
-6. SUFFICIENCY & GENTLE WRAP-UP (SET is_sufficient = True):
-   - Once the conversation covers the problem, actions, and metrics or trade-offs with enough substance to craft 2-3 stellar resume bullet points for {{objective}}, DO NOT keep interrogating.
-   - Set `is_sufficient = True`.
-   - In `user_message`, warmly summarize the strong evidence gathered and let the candidate know they have great material and can click "Wrap Up & Save Evidence" whenever they are ready. DO NOT end with a question mark. DO NOT ask for more information.
-7. NEGATIVE RESPONSES & DIMINISHING RETURNS:
-   - If the candidate answers "no", "I haven't", or states that they did not use other tools or have no further details:
-     - DO NOT interrogate them on why they haven't used other tools or what would motivate them to learn them.
-     - Set `is_sufficient = True`.
-     - Warmly acknowledge what they DID accomplish with their core tools and invite them to wrap up.
+
+### TURN DECISION MATRIX (4 MUTUALLY EXCLUSIVE STATES):
+For every candidate turn, identify which ONE of the following 4 states applies and adhere strictly to its rules:
+
+STATE 1: TARGET EVIDENCE SUFFICIENT (Evidence Cleared)
+- WHEN: The candidate has provided concrete, verifiable details (problem context, specific actions/ownership, and measurable outcomes or critical trade-offs) for "{{objective}}" within this active experience.
+- SCHEMA ASSIGNMENT:
+  - `is_sufficient = True`
+  - `suggested_experience_tab = None`
+- USER MESSAGE: Warmly and concisely summarize the strong evidence gathered for "{{objective}}". Inform the candidate they have great material and can click "Wrap Up & Save Evidence" whenever ready. DO NOT ask any more questions. DO NOT end with a question mark.
+
+STATE 2: SKILL GAINED ELSEWHERE / TAB REDIRECTION (Experience Mismatch)
+- WHEN: The candidate mentions or indicates that the probed skill / requirement was gained or applied in a DIFFERENT category than the current active tab (e.g. candidate is on Project, but states "I developed REST APIs through my internship").
+- CRITICAL TAB GUARDRAIL: If the candidate is ALREADY on the matching tab (e.g. discussing an internship or job while currently in Work Experience), this state does NOT apply! DO NOT suggest switching tabs. Keep `suggested_experience_tab = None`. Proceed to State 4 (Probing) or State 1 (Sufficient).
+- SCHEMA ASSIGNMENT:
+  - `is_sufficient = False` (MANDATORY: Evidence for this requirement is NOT yet gathered under its proper experience. Concluding now would cause the skill to be dropped downstream.)
+  - `suggested_experience_tab = <category>` (Set to "work_experience" for jobs/internships, "project" for personal/class projects, "leadership" for clubs/activities, or "other").
+- USER MESSAGE:
+  1. Warmly acknowledge where they gained it (e.g., their internship or project).
+  2. Explain that to capture that experience accurately for this requirement, they should switch to that tab on the right.
+  3. Explicitly instruct them to click that tab (e.g. "Since your REST API experience was through your internship rather than this project, please switch over to the **Work Experience** tab on the right so we can capture your internship details.").
+  4. DO NOT summarize to conclude. DO NOT invite them to click "Wrap Up & Save Evidence". DO NOT confirm as proceed.
+  5. Leave `experience_metadata` as null or empty for any fields that belong to the other category so the active form is not corrupted.
+
+STATE 3: NO EXPERIENCE WITH THIS SKILL / GAP (Dead End)
+- WHEN: The candidate explicitly confirms they have NO experience with this tool/skill anywhere across their background (e.g. "No, I haven't worked with REST APIs", "I don't have experience with cloud storage").
+- SCHEMA ASSIGNMENT:
+  - `is_sufficient = False` (MANDATORY: Do NOT fake evidence completion.)
+  - `suggested_experience_tab = None`
+- USER MESSAGE: Respectfully and reassuringly acknowledge what they stated. DO NOT interrogate why they haven't used it or push them to learn it. Explain that it's completely okay, and inform them they can click "Skip Topic" below to proceed, or let you know if they'd like to highlight another aspect of their work. DO NOT invite wrap-up or claim target evidence was cleared.
+
+STATE 4: IN PROGRESS / PROBING
+- WHEN: The candidate is describing work within the active experience, but key pillars (problem context, specific methods/actions, trade-offs, or measurable impact) are still missing for "{{objective}}".
+- SCHEMA ASSIGNMENT:
+  - `is_sufficient = False`
+  - `suggested_experience_tab = None`
+- USER MESSAGE: Apply the Bridge-Back technique and ask EXACTLY ONE thoughtful, high-leverage question actively probing for the missing pillar anchored to "{{objective}}".
+
 {scoping_instructions}
 """),
     ("human", 
@@ -370,9 +387,15 @@ Every strong resume bullet point needs a balance of:
         evidence_with_details=evidence_with_details
     ))
 
+    # Deterministic guard: If the LLM suggested the tab we are ALREADY on, it is NOT a redirect
+    suggested_tab = getattr(response, "suggested_experience_tab", None)
+    if suggested_tab == active_type:
+        suggested_tab = None
+
     # Merge newly detected metadata into active_metadata with strict whitelist sanitization
     merged_metadata = dict(active_metadata) if active_metadata else {}
-    if response.experience_metadata:
+    # Only merge metadata if NOT redirecting to another tab, to avoid polluting active form
+    if response.experience_metadata and not suggested_tab:
         new_data = response.experience_metadata.model_dump(exclude_none=True)
         # If experience_type is already locked, prevent LLM from changing it mid-investigation
         if merged_metadata.get("experience_type"):
@@ -391,6 +414,7 @@ Every strong resume bullet point needs a balance of:
         "investigation_messages": [AIMessage(content=response.user_message)],
         "need_more_info": True,
         "is_sufficient": bool(getattr(response, "is_sufficient", False)),
+        "suggested_experience_tab": suggested_tab,
         "active_experience_metadata": merged_metadata or None,
     }
     

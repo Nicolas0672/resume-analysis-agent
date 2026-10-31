@@ -119,6 +119,7 @@ def human_investigate_chat(state: AgentState):
         ],
         "experience_metadata": state.get("active_experience_metadata"),
         "is_sufficient": state.get("is_sufficient", False),
+        "suggested_experience_tab": state.get("suggested_experience_tab"),
     })
 
     if isinstance(payload, dict):

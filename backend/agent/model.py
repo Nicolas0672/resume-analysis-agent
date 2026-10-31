@@ -1,6 +1,6 @@
 from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from model.resume_schema import ResumeBullet
@@ -296,131 +296,140 @@ ALLOWED_KEYS_PER_TYPE = {
     "other": {"experience_type", "other_title", "other_organization", "other_role", "other_notes"},
 }
 
-class InvestigateOutput(BaseModel):
+class BaseInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
     is_sufficient: bool = Field(
         default=False,
         description=(
-            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
-            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
-            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
-            "or indicated they did not use other tools). "
-            "Set to False if key pillars are still missing and further probing is genuinely needed."
+            "Set to True ONLY when the candidate has provided concrete, verifiable evidence "
+            "(actions, technical methods, problem context, and outcomes or critical trade-offs) demonstrating the target requirement "
+            "within this active experience. "
+            "MUST be False if key evidence is still missing, if the candidate lacked experience with this requirement, "
+            "or if the skill was gained elsewhere."
         )
     )
+    suggested_experience_tab: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
+        default=None,
+        description=(
+            "If the candidate indicates that the probed skill/requirement was gained or applied in a "
+            "different experience category (e.g. in an internship or job -> 'work_experience', personal or academic project -> 'project', "
+            "club or leadership initiative -> 'leadership', other -> 'other'), specify that category here. Otherwise None."
+        )
+    )
+    evidence: Evidence | None = None
+
+    @model_validator(mode="after")
+    def enforce_invariants(self):
+        if self.suggested_experience_tab is not None:
+            self.is_sufficient = False
+        return self
+
+class InvestigateOutput(BaseInvestigateOutput):
     user_message: str = Field(
         description=(
-            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next probing question to investigate and gather evidence for the active objective and job requirement, "
-            "or politely directing them to switch tabs if their experience belongs to a different category. "
-            "The question MUST directly investigate and gather evidence for the active objective and job requirement, "
-            "bridging the candidate's stated experience back to the target skill."
+            "Conversational response to the candidate adhering to the 4 Turn States: "
+            "1. If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
+            "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right so it can be captured accurately; DO NOT confirm as proceed or invite wrap-up. "
+            "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic' to proceed. "
+            "4. Otherwise: ask the single next high-leverage probing question directly investigating this objective."
         )
     )
     experience_metadata: Optional[ExperienceMetadata] = Field(
         default=None,
         description="High-level identity of the single experience being discussed. If candidate discusses multiple experiences, pick the most relevant one and do not merge."
     )
-    evidence: Evidence | None = None
 
-class WorkInvestigateOutput(BaseModel):
-    need_more_info: SkipJsonSchema[bool] = True
-    is_sufficient: bool = Field(
-        default=False,
+class WorkInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["project", "leadership", "other"]] = Field(
+        default=None,
         description=(
-            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
-            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
-            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
-            "or indicated they did not use other tools). "
-            "Set to False if key pillars are still missing and further probing is genuinely needed."
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. personal/academic project -> 'project', club/activity -> 'leadership', other -> 'other'), specify that category here. "
+            "MUST be None if discussing any work experience, employment, or internship."
         )
     )
     user_message: str = Field(
         description=(
-            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this work experience, or directing them to switch tabs if they "
-            "indicated this experience belongs to a different category (e.g. project, leadership, or other). "
-            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this work experience."
+            "Conversational response to the candidate regarding this work experience: "
+            "1. If is_sufficient is True: DO NOT ask any more questions. Warmly summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
+            "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right (e.g. Project, Leadership, Other); DO NOT confirm as proceed or invite wrap-up. "
+            "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic'. "
+            "4. Otherwise: ask the single next question directly investigating this objective within this work experience."
         )
     )
     experience_metadata: Optional[WorkExperienceMetadata] = Field(
         default=None,
         description="Identity details strictly for this work experience (company, job_title, duration, location). Do NOT extract project or leadership fields."
     )
-    evidence: Evidence | None = None
 
-class ProjectInvestigateOutput(BaseModel):
-    need_more_info: SkipJsonSchema[bool] = True
-    is_sufficient: bool = Field(
-        default=False,
+class ProjectInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "leadership", "other"]] = Field(
+        default=None,
         description=(
-            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
-            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
-            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
-            "or indicated they did not use other tools). "
-            "Set to False if key pillars are still missing and further probing is genuinely needed."
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', club/activity -> 'leadership', other -> 'other'), specify that category here. "
+            "MUST be None if discussing projects."
         )
     )
     user_message: str = Field(
         description=(
-            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this project, or directing them to switch tabs if they "
-            "indicated this experience belongs to a different category (e.g. work experience, leadership, or other). "
-            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this project."
+            "Conversational response to the candidate regarding this project: "
+            "1. If is_sufficient is True: DO NOT ask any more questions. Warmly summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
+            "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right (e.g. Work Experience for internship/job, Leadership, Other); DO NOT confirm as proceed or invite wrap-up. "
+            "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic'. "
+            "4. Otherwise: ask the single next question directly investigating this objective within this project."
         )
     )
     experience_metadata: Optional[ProjectMetadata] = Field(
         default=None,
         description="Identity details strictly for this project (project_name, role, technologies, duration). Do NOT extract work or leadership fields."
     )
-    evidence: Evidence | None = None
 
-class LeadershipInvestigateOutput(BaseModel):
-    need_more_info: SkipJsonSchema[bool] = True
-    is_sufficient: bool = Field(
-        default=False,
+class LeadershipInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "project", "other"]] = Field(
+        default=None,
         description=(
-            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
-            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
-            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
-            "or indicated they did not use other tools). "
-            "Set to False if key pillars are still missing and further probing is genuinely needed."
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', project -> 'project', other -> 'other'), specify that category here. "
+            "MUST be None if discussing leadership or clubs."
         )
     )
     user_message: str = Field(
         description=(
-            "If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite the candidate to click 'Wrap Up & Save Evidence' whenever they are ready. If is_sufficient is False: ask the next question about this leadership experience, or directing them to switch tabs if they "
-            "indicated this experience belongs to a different category (e.g. work experience, project, or other). "
-            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this leadership experience."
+            "Conversational response to the candidate regarding this leadership experience: "
+            "1. If is_sufficient is True: DO NOT ask any more questions. Warmly summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
+            "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right (e.g. Work Experience, Project, Other); DO NOT confirm as proceed or invite wrap-up. "
+            "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic'. "
+            "4. Otherwise: ask the single next question directly investigating this objective within this leadership experience."
         )
     )
     experience_metadata: Optional[LeadershipMetadata] = Field(
         default=None,
         description="Identity details strictly for this leadership experience (leadership_title, position, duration, location). Do NOT extract work or project fields."
     )
-    evidence: Evidence | None = None
 
-class OtherInvestigateOutput(BaseModel):
-    need_more_info: SkipJsonSchema[bool] = True
-    is_sufficient: bool = Field(
-        default=False,
+class OtherInvestigateOutput(BaseInvestigateOutput):
+    suggested_experience_tab: Optional[Literal["work_experience", "project", "leadership"]] = Field(
+        default=None,
         description=(
-            "Set to True if the candidate has provided sufficient concrete evidence (context, actions, "
-            "prioritization/trade-offs, or measurable outcomes) to craft strong resume bullet points for this objective, "
-            "OR if further questioning yields diminishing returns (e.g. candidate has no more details, gave a short negative response, "
-            "or indicated they did not use other tools). "
-            "Set to False if key pillars are still missing and further probing is genuinely needed."
+            "If the candidate indicates that the probed skill/requirement was gained in a DIFFERENT experience category "
+            "(e.g. internship/job -> 'work_experience', project -> 'project', club -> 'leadership'), specify that category here. "
+            "MUST be None if discussing other experiences."
         )
     )
     user_message: str = Field(
         description=(
-            "Message to user asking the next question about this experience, or directing them to switch tabs if they "
-            "indicated this experience belongs to a different category. "
-            "The question MUST directly investigate and gather evidence for the active objective and job requirement within this other experience."
+            "Conversational response to the candidate regarding this experience: "
+            "1. If is_sufficient is True: DO NOT ask any more questions. Warmly summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
+            "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right; DO NOT confirm as proceed or invite wrap-up. "
+            "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic'. "
+            "4. Otherwise: ask the single next question directly investigating this objective within this other experience."
         )
     )
     experience_metadata: Optional[OtherMetadata] = Field(
         default=None,
         description="Identity details strictly for this other experience (other_title, other_organization, other_role, other_notes)."
     )
-    evidence: Evidence | None = None
 
 SCOPED_INVESTIGATE_OUTPUT_MAP = {
     "work_experience": WorkInvestigateOutput,

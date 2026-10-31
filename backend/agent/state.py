@@ -44,6 +44,7 @@ class AgentState(TypedDict):
     iteration_loop: int
     active_experience_metadata: Optional[dict]
     is_sufficient: Optional[bool]
+    suggested_experience_tab: Optional[str]
 
     
 
