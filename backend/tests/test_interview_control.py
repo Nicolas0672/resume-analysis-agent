@@ -571,12 +571,15 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
             # Inspect the prompt that was passed to the LLM
             call_args = mock_structured.ainvoke.call_args[0][0]
             system_prompt_content = call_args[0].content
+            human_prompt_content = call_args[1].content
 
-            # Verify Primary Directive and North Star were formatted into system prompt
-            self.assertIn("INVESTIGATION TARGET (NORTH STAR)", system_prompt_content)
-            self.assertIn("PRIMARY DIRECTIVE — OBJECTIVE-ANCHORED PROBING", system_prompt_content)
-            self.assertIn("Evaluate cross-team alignment and communication trade-offs", system_prompt_content)
+            # Verify Static Directives are preserved in static system prompt
+            self.assertIn("PRIMARY DIRECTIVE", system_prompt_content)
             self.assertIn("THE BRIDGE-BACK TECHNIQUE", system_prompt_content)
+
+            # Verify Dynamic Objective and North Star target are placed in human prompt (Cache Optimization)
+            self.assertIn("INVESTIGATION TARGET (NORTH STAR)", human_prompt_content)
+            self.assertIn("Evaluate cross-team alignment and communication trade-offs", human_prompt_content)
 
         self.assertTrue(res["need_more_info"])
         self.assertIn("collaborate", res["investigation_messages"][0].content)
@@ -949,7 +952,8 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
             # Check prompt contents passed to LLM
             call_args = mock_structured.ainvoke.call_args[0][0]
             system_prompt_content = call_args[0].content
-            self.assertIn("THIS IS THE CURRENT, CORRECT TAB! DO NOT suggest switching tabs.", system_prompt_content)
+            human_prompt_content = call_args[1].content
+            self.assertIn("THIS IS THE CURRENT, CORRECT TAB! DO NOT suggest switching tabs.", human_prompt_content)
             self.assertIn("CRITICAL TAB GUARDRAIL", system_prompt_content)
 
         self.assertFalse(res["is_sufficient"])
