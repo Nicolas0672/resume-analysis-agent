@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from agent.model import (
     ALLOWED_KEYS_PER_TYPE,
     EvidenceWithDetails,
+    InitialInvestigateOutput,
     InvestigateOutput,
     SCOPED_INVESTIGATE_OUTPUT_MAP,
 )
@@ -70,6 +71,7 @@ STATE 1: TARGET EVIDENCE SUFFICIENT (Evidence Cleared)
 - USER MESSAGE: Warmly and concisely summarize the strong evidence gathered for the target objective. Inform the candidate they have great material and can click "Wrap Up & Save Evidence" whenever ready. DO NOT ask any more questions. DO NOT end with a question mark.
 
 STATE 2: SKILL GAINED ELSEWHERE / TAB REDIRECTION (Experience Mismatch)
+- MANDATORY PRE-CONDITION: An active experience tab MUST already be established. If NO experience tab is currently active (Initial Experience Detection mode), State 2 DOES NOT APPLY! Keep `suggested_experience_tab = None`. Warmly ask an opening question to discover where they gained the skill (State 4).
 - WHEN: The candidate mentions or indicates that the probed skill / requirement was gained or applied in a DIFFERENT category than the current active tab (e.g. candidate is on Project, but states "I developed REST APIs through my internship").
 - CRITICAL TAB GUARDRAIL: If the candidate is ALREADY on the matching tab (e.g. discussing an internship or job while currently in Work Experience), this state does NOT apply! DO NOT suggest switching tabs. Keep `suggested_experience_tab = None`. Proceed to State 4 (Probing) or State 1 (Sufficient).
 - SCHEMA ASSIGNMENT:
@@ -347,7 +349,7 @@ DO NOT ask any questions. Do not ask for more information.
 
     # Case 5: Human sent an answer to continue the conversation
     active_type = active_metadata.get("experience_type")
-    output_schema = SCOPED_INVESTIGATE_OUTPUT_MAP.get(active_type, InvestigateOutput)
+    output_schema = SCOPED_INVESTIGATE_OUTPUT_MAP.get(active_type, InitialInvestigateOutput)
 
     if active_type:
         type_display = active_type.replace("_", " ").title()
@@ -368,8 +370,9 @@ DO NOT ask any questions. Do not ask for more information.
     else:
         scoping_instructions = """### Initial Experience Detection:
 - The experience category for this requirement has not been determined yet.
+- Keep `suggested_experience_tab = None`. DO NOT suggest switching tabs because no active tab has been established yet.
 - From the candidate's response, determine whether this experience is best categorized as 'work_experience', 'project', 'leadership', or 'other', and set experience_type accordingly in experience_metadata.
-- Once determined, focus exclusively on that single experience, investigating how they demonstrated the target objective within it."""
+- Focus on asking an engaging opening question to explore where they demonstrated the target objective."""
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", STATIC_INVESTIGATE_SYSTEM_PROMPT),
@@ -395,9 +398,11 @@ DO NOT ask any questions. Do not ask for more information.
         scoping_instructions=scoping_instructions,
     ))
 
-    # Deterministic guard: If the LLM suggested the tab we are ALREADY on, it is NOT a redirect
+    # Deterministic guard: Redirection only applies when an active experience tab is already established
     suggested_tab = getattr(response, "suggested_experience_tab", None)
-    if suggested_tab == active_type:
+    if not active_type:
+        suggested_tab = None
+    elif suggested_tab == active_type:
         suggested_tab = None
 
     # Merge newly detected metadata into active_metadata with strict whitelist sanitization

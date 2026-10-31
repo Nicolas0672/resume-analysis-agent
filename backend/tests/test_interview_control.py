@@ -960,3 +960,76 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(res["suggested_experience_tab"])
         self.assertTrue(res["need_more_info"])
         self.assertIn("endpoints", res["investigation_messages"][0].content)
+
+    def test_initial_investigate_output_schema_disallows_redirection(self):
+        """Ensure InitialInvestigateOutput constrains suggested_experience_tab to null."""
+        from agent.model import InitialInvestigateOutput
+        schema = InitialInvestigateOutput.model_json_schema()
+        tab_prop = schema["properties"]["suggested_experience_tab"]
+        
+        # Verify that string categories (work_experience, project, etc.) are NOT allowed
+        enum_values = []
+        for item in tab_prop.get("anyOf", []):
+            if "enum" in item:
+                enum_values.extend(item["enum"])
+            elif "const" in item:
+                enum_values.append(item["const"])
+        self.assertNotIn("work_experience", enum_values)
+        self.assertNotIn("project", enum_values)
+        self.assertNotIn("leadership", enum_values)
+        self.assertNotIn("other", enum_values)
+
+    async def test_investigate_candidate_initial_turn_without_active_metadata_prohibits_tab_redirection(self):
+        """Ensure when active_experience_metadata is None, agent uses InitialInvestigateOutput and disallows redirection."""
+        from agent.model import InitialInvestigateOutput
+        topic = InterviewDetails(
+            topic_id="topic-api-init",
+            topic="REST API & Cloud",
+            priority="High",
+            reason="Core backend requirement",
+            objective="Evaluate REST API development",
+            job_requirement="RESTful API design",
+            relevant_experience=["Acme Internship"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specific REST API details missing",
+        )
+        state = {
+            "topic_id_selection": "topic-api-init",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": None,  # No active tab selected yet!
+        }
+
+        mock_output = InitialInvestigateOutput(
+            is_sufficient=False,
+            suggested_experience_tab=None,
+            user_message="I noticed you have experience with APIs from Acme Internship. Did you work on REST APIs there or in a project?",
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+            # Ensure InitialInvestigateOutput was selected as the schema
+            mock_llm.with_structured_output.assert_called_once_with(InitialInvestigateOutput)
+
+            # Verify prompt contents passed to LLM
+            call_args = mock_structured.ainvoke.call_args[0][0]
+            system_prompt_content = call_args[0].content
+            human_prompt_content = call_args[1].content
+            self.assertIn("MANDATORY PRE-CONDITION: An active experience tab MUST already be established", system_prompt_content)
+            self.assertIn("Keep `suggested_experience_tab = None`", human_prompt_content)
+
+        # Assertions on returned state
+        self.assertFalse(res["is_sufficient"])
+        self.assertIsNone(res["suggested_experience_tab"])
+        self.assertTrue(res["need_more_info"])
+        self.assertIn("Acme Internship", res["investigation_messages"][0].content)
