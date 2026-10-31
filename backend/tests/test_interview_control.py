@@ -774,3 +774,105 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tailored.leadership_position, "President")
         self.assertEqual(tailored.duration, "2023 - 2024")
         self.assertIsNone(tailored.project_name)
+
+    def test_model_validator_enforces_is_sufficient_false_on_suggested_tab(self):
+        """Ensure that setting suggested_experience_tab forces is_sufficient=False via model_validator."""
+        output = InvestigateOutput(
+            is_sufficient=True,
+            suggested_experience_tab="work_experience",
+            user_message="Please switch to the Work Experience tab.",
+        )
+        self.assertFalse(output.is_sufficient)
+        self.assertEqual(output.suggested_experience_tab, "work_experience")
+
+    def test_investigate_output_models_include_suggested_experience_tab(self):
+        """Ensure suggested_experience_tab is present in the JSON schema across all specialized output models."""
+        from agent.model import ProjectInvestigateOutput, LeadershipInvestigateOutput, OtherInvestigateOutput
+        for cls in [InvestigateOutput, WorkInvestigateOutput, ProjectInvestigateOutput, LeadershipInvestigateOutput, OtherInvestigateOutput]:
+            schema = cls.model_json_schema()
+            self.assertIn("suggested_experience_tab", schema.get("properties", {}))
+            self.assertIn("is_sufficient", schema.get("properties", {}))
+
+    def test_normalize_graph_response_preserves_suggested_experience_tab(self):
+        """Ensure normalize_graph_response preserves suggested_experience_tab in the normalized interrupt dict."""
+        from agent.graph_service import normalize_graph_response
+        mock_result = {
+            "__interrupt__": [
+                MockInterrupt({
+                    "type": "investigation_chat",
+                    "message": "Please switch tabs",
+                    "options": [],
+                    "experience_metadata": {"project_name": "AI Study Assistant"},
+                    "is_sufficient": False,
+                    "suggested_experience_tab": "work_experience",
+                })
+            ]
+        }
+        normalized = normalize_graph_response(mock_result)
+        self.assertIn("interrupt", normalized)
+        self.assertFalse(normalized["interrupt"].get("is_sufficient"))
+        self.assertEqual(normalized["interrupt"].get("suggested_experience_tab"), "work_experience")
+
+    async def test_investigate_candidate_skill_gained_elsewhere_redirects_without_wrap_up(self):
+        """Test candidate stating skill was gained through internship triggers work_experience redirection and is_sufficient=False."""
+        from agent.model import ProjectInvestigateOutput
+        topic = InterviewDetails(
+            topic_id="topic-api-1",
+            topic="REST API & Cloud",
+            priority="High",
+            reason="Core backend requirement",
+            objective="Evaluate REST API development and cloud storage integration",
+            job_requirement="RESTful API design and AWS S3 integration",
+            relevant_experience=["AI Study Assistant"],
+            relevant_experience_from_resume=None,
+            evidence_gap="Specific REST API details missing",
+        )
+        state = {
+            "topic_id_selection": "topic-api-1",
+            "interview_plan": InterviewPlan(interview_plan=[topic]),
+            "investigation_messages": [HumanMessage(content="i developed rest api but instead through my internship")],
+            "evidence_with_details": [],
+            "resume_data": None,
+            "human_investigate_action": "chat",
+            "active_experience_metadata": {
+                "experience_type": "project",
+                "project_name": "AI Study Assistant",
+            },
+        }
+
+        mock_output = ProjectInvestigateOutput(
+            is_sufficient=False,
+            suggested_experience_tab="work_experience",
+            user_message=(
+                "Got it! Since your REST API development experience was through your internship rather than "
+                "the AI Study Assistant project, please switch over to the **Work Experience** tab on the right "
+                "so we can capture your internship details and ensure this requirement is credited on your resume."
+            ),
+        )
+
+        with patch("agent.nodes.interview.ChatOpenAI") as mock_openai_cls:
+            mock_llm = MagicMock()
+            mock_structured = MagicMock()
+            mock_structured.ainvoke = AsyncMock(return_value=mock_output)
+            mock_llm.with_structured_output.return_value = mock_structured
+            mock_openai_cls.return_value = mock_llm
+
+            res = await investigate_candidate(state)
+
+            # Check prompt contents passed to LLM
+            call_args = mock_structured.ainvoke.call_args[0][0]
+            system_prompt_content = call_args[0].content
+            self.assertIn("TURN DECISION MATRIX (4 MUTUALLY EXCLUSIVE STATES)", system_prompt_content)
+            self.assertIn("STATE 2: SKILL GAINED ELSEWHERE / TAB REDIRECTION", system_prompt_content)
+            self.assertIn("STATE 3: NO EXPERIENCE WITH THIS SKILL / GAP", system_prompt_content)
+
+        # Assertions on returned state
+        self.assertFalse(res["is_sufficient"])
+        self.assertEqual(res["suggested_experience_tab"], "work_experience")
+        self.assertTrue(res["need_more_info"])
+        # Ensure active_experience_metadata remained clean (not corrupted)
+        self.assertEqual(res["active_experience_metadata"]["experience_type"], "project")
+        self.assertEqual(res["active_experience_metadata"]["project_name"], "AI Study Assistant")
+        # Ensure user_message instructs tab change and does NOT contain wrap up invite
+        self.assertIn("Work Experience", res["investigation_messages"][0].content)
+        self.assertNotIn("Wrap Up & Save Evidence", res["investigation_messages"][0].content)
