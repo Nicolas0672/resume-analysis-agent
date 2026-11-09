@@ -203,3 +203,18 @@ def normalize_graph_response(result):
         "stage": "completed",
         "result": result,
     }
+
+async def delete_session_thread(session_id: str, request: Request = None):
+    config = {
+        "configurable": {
+            "thread_id": session_id
+        }
+    }
+    graph_with_memory = request.app.state.graph_with_memory
+
+    if hasattr(graph_with_memory, "checkpointer") and graph_with_memory.checkpointer:
+        await graph_with_memory.checkpointer.adelete_thread(session_id)
+
+    return {
+        "success": True,
+    }

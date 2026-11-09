@@ -452,6 +452,27 @@ export async function getUserSessions(): Promise<UserSessionsResponse> {
   return response.json();
 }
 
+export async function deleteUserSession(sessionId: string): Promise<void> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: {
+      ...authHeaders,
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetail = "Failed to delete session";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // fallback
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+}
+
 export async function editResumeEntry(
   payload: EditEntryPayload
 ): Promise<EditEntryResponse> {
