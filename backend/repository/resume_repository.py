@@ -153,3 +153,24 @@ async def get_user_sessions(user_id: str) -> list[dict]:
     except Exception as e:
         logger.error(f"Error fetching user sessions from DB: {e}")
         return []
+
+async def delete_user_session(session_id: str, user_id: str) -> bool:
+    """Delete a session from the database if it belongs to the authenticated user."""
+    if not DATABASE_URL:
+        return False
+
+    try:
+        async with get_db_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    delete from user_sessions
+                    where session_id = %s and user_id = %s;
+                    """,
+                    (session_id, str(user_id)),
+                )
+                await conn.commit()
+                return cur.rowcount > 0
+    except Exception as e:
+        logger.error(f"Error deleting user session from DB: {e}")
+        return False

@@ -17,8 +17,9 @@ import {
   FileCheck2,
   ShieldCheck,
   Terminal,
+  Trash2,
 } from "lucide-react";
-import { getUserSessions } from "@/lib/api-client";
+import { getUserSessions, deleteUserSession } from "@/lib/api-client";
 import { UserSessionSummary } from "@/lib/types";
 import { ResiLogo } from "@/components/logo";
 import { CompanyLogo } from "@/components/company-logo";
@@ -95,6 +96,7 @@ export function Dropzone({
   const [sessions, setSessions] = useState<UserSessionSummary[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -260,6 +262,26 @@ export function Dropzone({
     if (onSelectSession) {
       setResumingSessionId(sessionId);
       onSelectSession(sessionId);
+    }
+  };
+
+  const handleDeletePastSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (deletingSessionId || resumingSessionId) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this session? All tailoring history and progress will be permanently removed."
+    );
+    if (!confirmed) return;
+
+    setDeletingSessionId(sessionId);
+    try {
+      await deleteUserSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete session. Please try again.");
+    } finally {
+      setDeletingSessionId(null);
     }
   };
 
@@ -582,24 +604,41 @@ export function Dropzone({
                           <span>{formatRelativeTime(sess.created_at)}</span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleResumePastSession(sess.session_id)}
-                          disabled={Boolean(resumingSessionId)}
-                          className="cursor-pointer inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 disabled:opacity-50 transition-colors"
-                        >
-                          {isCurrentResuming ? (
-                            <>
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              <span>Rehydrating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>Resume</span>
-                              <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeletePastSession(e, sess.session_id)}
+                            disabled={Boolean(deletingSessionId) || Boolean(resumingSessionId)}
+                            title="Delete session"
+                            aria-label="Delete session"
+                            className="cursor-pointer p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {deletingSessionId === sess.session_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleResumePastSession(sess.session_id)}
+                            disabled={Boolean(resumingSessionId) || Boolean(deletingSessionId)}
+                            className="cursor-pointer inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 disabled:opacity-50 transition-colors"
+                          >
+                            {isCurrentResuming ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span>Rehydrating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Resume</span>
+                                <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
