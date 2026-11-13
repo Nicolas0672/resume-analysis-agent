@@ -113,6 +113,8 @@ export interface ResumeReference {
 export interface InterviewDetails {
   topic_id: string;
   priority: "Low" | "Medium" | "High";
+  probe_type?: "skill_gap" | "metric_enrichment";
+  target_metrics?: string[] | null;
   relevant_experience?: string[];
   relevant_experience_from_resume?: ResumeReference[] | null;
   topic: string;
@@ -169,6 +171,7 @@ export interface TailorDecisionMatched {
   new_bullet?: ResumeBullet | null;
   reasoning: string;
   evidence: string[];
+  consolidated_with_topic_id?: string | null;
 }
 
 export interface TailorMatched {

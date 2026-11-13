@@ -40,6 +40,7 @@ interface TopicPackage {
   unmatchedProposals: TailorUnmatched[];
   allEvidence: string[];
   isApplied: boolean;
+  hasModifications: boolean;
   criticFeedback?: string;
   criticValid: boolean;
 }
@@ -92,7 +93,8 @@ export function EditorialDebrief({
           matchedProposals: [],
           unmatchedProposals: [],
           allEvidence: [],
-          isApplied: appliedTopicIds.includes(tid),
+          isApplied: false,
+          hasModifications: false,
           criticValid: true,
         });
       }
@@ -126,7 +128,8 @@ export function EditorialDebrief({
           matchedProposals: [],
           unmatchedProposals: [],
           allEvidence: [],
-          isApplied: appliedTopicIds.includes(tid),
+          isApplied: false,
+          hasModifications: false,
           criticValid: true,
         });
       }
@@ -162,10 +165,19 @@ export function EditorialDebrief({
       });
     }
 
-    // Deduplicate evidence items
+    // Deduplicate evidence items and determine modification/applied status
     map.forEach((pkg) => {
       pkg.allEvidence = Array.from(new Set(pkg.allEvidence));
-      pkg.isApplied = appliedTopicIds.includes(pkg.topicId);
+      const hasModifications =
+        pkg.matchedProposals.some((m) =>
+          m.decisions?.some((d) => d.action?.toUpperCase() === "MODIFY" || d.action?.toUpperCase() === "ADD")
+        ) ||
+        pkg.unmatchedProposals.some((u) =>
+          u.decisions?.some((d) => d.action?.toUpperCase() === "ADD" || !!d.new_bullet?.text)
+        );
+      pkg.hasModifications = hasModifications;
+      // If there are no bullet modifications needed (e.g. all KEEP), consider it automatically applied/satisfied
+      pkg.isApplied = appliedTopicIds.includes(pkg.topicId) || !hasModifications;
     });
 
     return Array.from(map.values());
@@ -219,7 +231,7 @@ export function EditorialDebrief({
       await onApplyTopic(selectedTopic.topicId);
       // Auto-advance to the next pending topic if available
       const nextPending = topicPackages.find(
-        (p) => p.topicId !== selectedTopic.topicId && !appliedTopicIds.includes(p.topicId)
+        (p) => p.topicId !== selectedTopic.topicId && !p.isApplied
       );
       if (nextPending) {
         onSelectTopic(nextPending.topicId);
@@ -399,9 +411,24 @@ export function EditorialDebrief({
                 ) || selectedTopic.unmatchedProposals.length > 0;
 
               if (!hasVisibleModifications) {
+                const consolidatedTopics = Array.from(
+                  new Set(
+                    selectedTopic.matchedProposals.flatMap((m) =>
+                      m.decisions
+                        ?.map((d) => d.consolidated_with_topic_id)
+                        .filter((id): id is string => Boolean(id)) || []
+                    )
+                  )
+                );
+
                 return (
-                  <div className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 p-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                    Existing resume bullets already satisfy this requirement. No wording modifications needed.
+                  <div className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 p-4 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-1.5">
+                    <p>Existing resume bullets already satisfy this requirement. No wording modifications needed.</p>
+                    {consolidatedTopics.length > 0 && (
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        Evidence consolidated with Topic {consolidatedTopics.join(", ")}.
+                      </p>
+                    )}
                   </div>
                 );
               }
@@ -543,7 +570,11 @@ export function EditorialDebrief({
             {selectedTopic.isApplied ? (
               <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Applied to Working Resume</span>
+                <span>
+                  {selectedTopic.hasModifications
+                    ? "Applied to Working Resume"
+                    : "Existing Resume Satisfies Requirement"}
+                </span>
               </span>
             ) : (
               <span>Ready to integrate into draft</span>

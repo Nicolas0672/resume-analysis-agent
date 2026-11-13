@@ -1,12 +1,15 @@
 
 
-from fastapi import HTTPException, Request, logger
+from fastapi import HTTPException, Request
 
 from agent.graph_service import delete_session_thread
 from api.auth import verify_session_ownership
 from core.concurrency import session_lock
 from repository.resume_repository import delete_user_session
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def delete_session_service(session_id: str, user_id: str, request: Request):
     await verify_session_ownership(session_id=session_id, user_id=user_id)
