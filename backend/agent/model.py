@@ -40,8 +40,17 @@ class InterviewDetails(BaseModel):
 
     priority: Literal["Low", "Medium", "High"]
 
+    probe_type: Literal["skill_gap", "metric_enrichment"] = Field(
+        default="skill_gap",
+        description=(
+            "'skill_gap' when investigating unproven technical requirements; "
+            "'metric_enrichment' when the candidate already has the required experience, "
+            "but their resume bullets are purely qualitative and need quantifiable scale, users, or performance metrics."
+        )
+    )
+
     topic: str = Field(
-        description="Concise name for the specific investigation target."
+        description="Concise name for the specific investigation target (e.g. 'Study Group App: User Scale & API Latency')."
     )
 
     job_requirement: str = Field(
@@ -51,16 +60,24 @@ class InterviewDetails(BaseModel):
     reason: str = Field(
         description=(
             "Why this requirement warrants investigation for this candidate. "
-            "Explain the evidence gap in candidate-specific terms rather than simply "
-            "stating that the requirement is missing from the resume."
+            "For metric_enrichment, explain that the candidate demonstrated the core work "
+            "but lacks quantifiable scale, user adoption, throughput, or latency metrics."
         )
     )
 
     objective: str = Field(
         description=(
-            "What the investigation should establish. Define the specific evidence "
-            "needed to determine whether this candidate can credibly demonstrate the "
-            "job requirement."
+            "What the investigation should establish. For metric_enrichment, define the specific metric targets "
+            "needed to turn qualitative descriptions into high-impact Google XYZ bullet points."
+        )
+    )
+
+    target_metrics: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "If probe_type is 'metric_enrichment', list the specific metrics to discover "
+            "(e.g. ['student user count', 'active study groups', 'API response latency', 'cloud uptime']). "
+            "None if probe_type is 'skill_gap'."
         )
     )
 
@@ -81,9 +98,8 @@ class InterviewDetails(BaseModel):
 
     evidence_gap: str = Field(
         description=(
-        "The specific important fact, evidence, or uncertainty that is currently "
-        "unknown, weak, or insufficiently demonstrated. This should describe what "
-        "the interview needs to uncover, not merely repeat the job requirement."
+            "The specific important fact, evidence, or unquantified metric dimension that is currently "
+            "unknown or weak. This should describe what the interview needs to uncover, not merely repeat the job requirement."
         )
     )
 
@@ -298,14 +314,29 @@ ALLOWED_KEYS_PER_TYPE = {
 
 class BaseInvestigateOutput(BaseModel):
     need_more_info: SkipJsonSchema[bool] = True
+    already_established_facts: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "List any technologies, tools, cloud platforms, roles, or metrics mentioned in the target objective that "
+            "are ALREADY verified in the Established Evidence Bank across any candidate experience. "
+            "If none, return empty list."
+        )
+    )
+    unresolved_target_points: Optional[list[str]] = Field(
+        default_factory=list,
+        description=(
+            "List ONLY the remaining unknown elements from the target objective that still need to be probed "
+            "(e.g. ['Number of student users or active study groups']). "
+            "NEVER include anything listed in already_established_facts."
+        )
+    )
     is_sufficient: bool = Field(
         default=False,
         description=(
-            "Set to True ONLY when the candidate has provided concrete, verifiable evidence "
-            "(actions, technical methods, problem context, and outcomes or critical trade-offs) demonstrating the target requirement "
-            "within this active experience. "
-            "MUST be False if key evidence is still missing, if the candidate lacked experience with this requirement, "
-            "or if the skill was gained elsewhere."
+            "Set to True ONLY when the candidate has demonstrated concrete actions for the target requirement, "
+            "AND either applicable metrics/scale were gathered (or already known in the evidence bank), "
+            "or the candidate confirmed they were not tracked or not applicable. "
+            "MUST be False if key actions are missing or if applicable metrics have not yet been probed."
         )
     )
     suggested_experience_tab: Optional[Literal["work_experience", "project", "leadership", "other"]] = Field(
@@ -331,7 +362,7 @@ class InvestigateOutput(BaseInvestigateOutput):
             "1. If is_sufficient is True: DO NOT ask any more questions. Warmly and concisely summarize the strong evidence gathered and invite them to click 'Wrap Up & Save Evidence'. "
             "2. If suggested_experience_tab is set: warmly acknowledge where the skill was gained and explicitly instruct them to switch to that tab on the right so it can be captured accurately; DO NOT confirm as proceed or invite wrap-up. "
             "3. If candidate confirms no experience with this requirement anywhere: politely acknowledge, reassure them, and suggest using 'Skip Topic' to proceed. "
-            "4. Otherwise: ask the single next high-leverage probing question directly investigating this objective."
+            "4. Otherwise: ask the single next high-leverage probing question addressing ONLY unresolved_target_points. Acknowledge already_established_facts naturally if helpful, but NEVER re-ask details that are already established."
         )
     )
     experience_metadata: Optional[ExperienceMetadata] = Field(
@@ -353,6 +384,7 @@ class InitialInvestigateOutput(BaseInvestigateOutput):
             "Conversational opening question to discover which experience the candidate demonstrated this requirement in. "
             "If relevant experiences are listed from their resume, warmly reference them and ask if they developed the skill there or elsewhere. "
             "DO NOT suggest switching tabs because no active tab has been chosen yet. "
+            "Address ONLY unresolved_target_points. Acknowledge already_established_facts naturally if helpful, but NEVER ask the candidate to clarify or repeat them. "
             "Ask EXACTLY ONE high-leverage opening question."
         )
     )
@@ -480,14 +512,54 @@ class EvidenceMappingResult(BaseModel):
     evidence_mappings: List[EvidenceMapping]
 
 class TailorDecisionMatched(BaseModel):
-    action: Literal["KEEP", "MODIFY", "ADD"]
+    action: Literal["KEEP", "MODIFY", "ADD"] = Field(
+        description=(
+            "Decision action for this bullet: "
+            "- 'MODIFY': Improve an existing bullet with verified evidence (clarity, technical depth, metrics). "
+            "- 'ADD': ONLY when verified evidence represents a completely distinct responsibility not yet covered. "
+            "NEVER 'ADD' a bullet if the responsibility (e.g., cloud deployment/hosting) is already addressed "
+            "by an existing bullet or another topic's proposal on this same resume entry. "
+            "- 'KEEP': Leave unchanged, OR choose KEEP if another topic's proposal on this entry already "
+            "consolidates this evidence (set consolidated_with_topic_id accordingly)."
+        )
+    )
     old_bullet: Optional[ResumeBullet] 
-    new_bullet: Optional[ResumeBullet] = Field(description="New bulletpoint points, utilizing XYZ format, accomplished X, as measured by Y, by doing Z, if enough details is present such as metrics/impact. Ensure bullet points created are aligned with job requirement. Do not invent metrics or details if not present")
-    reasoning: str
-    evidence: list[str]
+    new_bullet: Optional[ResumeBullet] = Field(
+        default=None,
+        description=(
+            "The proposed tailored bullet point. Must represent a distinct, non-overlapping responsibility within this entry. "
+            "Do NOT duplicate or repeat responsibilities covered by other bullets on this experience (e.g., avoid multiple bullets discussing deployment/hosting). "
+            "If multiple topics provide details about the same responsibility (e.g., Azure VM hosting + Ubuntu deployment + user scale), "
+            "consolidate all details into ONE modified bullet. "
+            "Utilize Google XYZ format (accomplished [X] as measured by [Y] by doing [Z]) when metrics are present. "
+            "Must be None if action is KEEP."
+        )
+    )
+    reasoning: str = Field(
+        description=(
+            "Justification for the decision. Explain how the bullet improves alignment while strictly avoiding "
+            "duplicating responsibilities with other existing or proposed bullets on this resume entry."
+        )
+    )
+    evidence: list[str] = Field(
+        description="List of verified candidate statements and evidence items supporting this proposal."
+    )
+    consolidated_with_topic_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "If this topic's evidence was synthesized and consolidated into a bullet proposal under another topic "
+            "(to avoid redundant, duplicate bullets on this experience), specify that topic_id here. "
+            "Otherwise None."
+        )
+    )
 
 class TailorMatched(BaseModel):
-    decisions: list[TailorDecisionMatched]
+    decisions: list[TailorDecisionMatched] = Field(
+        description=(
+            "List of decisions for this experience. Every proposed bullet must cover a distinct functional pillar. "
+            "Do not produce multiple bullets that overlap in responsibility."
+        )
+    )
 
     resume_reference: ResumeReference = Field(description="Reference to the specific resume entry)")
     topic_id: str = Field(
@@ -541,12 +613,18 @@ class BulletFeedback(BaseModel):
         description="If invalid, identify the specific claim that is unsupported or missing evidence, state that the claim must be removed or corrected, and explain which evidence limitation makes it inaccurate. If valid, state that no factual correction is required."
     )
 
-    sentence_id: int
+    sentence_id: int = Field(
+        description="The sentence_id of the bullet point being evaluated."
+    )
 
 class Feedback(BaseModel):
+    topic_id: str = Field(
+        description=(
+            "Copy the topic_id from the corresponding input exactly. "
+            "Never modify, generate, or invent a topic_id."
+        )
+    )
     bullet_feedbacks: list[BulletFeedback]
-
-    topic_id: SkipJsonSchema[str] = None
 
 
 class RegeneratedBullets(BaseModel):

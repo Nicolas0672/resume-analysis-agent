@@ -72,9 +72,15 @@ async def analyze_candidate(state: AgentState):
 
     Do not invent or assume candidate experience, skills, metrics, responsibilities, or outcomes.
 
-    Do not flag availability, location, scheduling, work authorization, citizenship, start date, timing, eligibility, or semester requirements.
+    ### Degree & Education Requirements (Strict Rule)
 
-    If job posting requires candidate to currently have a degree and candidate does not clearly have one right now based on expected grad date or missing info, flag it as missing
+    The ONLY education gap you are permitted to flag is when a job explicitly requires a completed degree RIGHT NOW:
+    - **Completed Degree Required NOW**: If the job posting explicitly requires a completed degree (e.g., "Must hold a Bachelor's degree in CS") and the candidate does not currently have one (they are still an undergraduate with an expected future graduation date), flag it as `missing`.
+
+    In all other cases, DO NOT create an education gap:
+    - **Currently Pursuing / Enrolled**: If the requirement asks for "currently pursuing a degree", "enrolled in school", student status, or an internship eligibility window, and the candidate is enrolled in a relevant program (e.g. B.S. in CS), consider the requirement **SATISFIED** (a strength/match, NEVER a gap or partial match).
+    - **NO Class Standing or Semester Math**: NEVER audit, calculate, or flag academic year standing (e.g., freshman, sophomore, junior, senior), completed credits, or whether the candidate will reach a specific year by an internship start date. Do not flag this as unclear or partial.
+    - **Logistics**: Do not flag availability, location, scheduling, work authorization, citizenship, start date, timing, or eligibility constraints.
     ### Strength behavior
 
     Strengths should represent meaningful, evidence-backed matches to job requirements.

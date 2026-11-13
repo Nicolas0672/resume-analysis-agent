@@ -112,16 +112,16 @@ class TestInterviewControl(unittest.IsolatedAsyncioTestCase):
         valid, err = validate_experience_metadata({"experience_type": "other", "other_title": "Open Source Contributor"})
         self.assertTrue(valid)
 
-    def test_reset_investigation_clears_action_and_metadata(self):
-        """Ensure reset_investigation clears messages, resets action to chat, and clears metadata."""
+    def test_reset_investigation_clears_messages_and_preserves_metadata(self):
+        """Ensure reset_investigation clears messages, resets action to chat, and preserves active_experience_metadata."""
         state = {
             "investigation_messages": [AIMessage(content="q1", id="m1")],
             "human_investigate_action": "skip",
-            "active_experience_metadata": {"company": "OldCorp"},
+            "active_experience_metadata": {"company": "TargetCorp"},
         }
         res = reset_investigation(state)
         self.assertEqual(res["human_investigate_action"], "chat")
-        self.assertIsNone(res["active_experience_metadata"])
+        self.assertEqual(res["active_experience_metadata"], {"company": "TargetCorp"})
         self.assertEqual(len(res["investigation_messages"]), 1)
 
     def test_human_after_interview_planner_smart_prepopulation(self):

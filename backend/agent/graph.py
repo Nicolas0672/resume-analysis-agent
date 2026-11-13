@@ -73,6 +73,7 @@ graph.add_conditional_edges(
     },
 )
 
+# Clear the investigation state and start a new investigation turn
 graph.add_edge(NodesNames.RESET_INVESTIGATION, NodesNames.INVESTIGATE_CANDIDATE)
 
 graph.add_conditional_edges(
@@ -80,10 +81,12 @@ graph.add_conditional_edges(
     route_investigation_turn,
     {
         "END": NodesNames.HUMAN_AFTER_INTERVIEW_PLANNER,
+        # Node that handles the human chat interaction during the investigation turn. The human can provide input, ask questions, or give feedback, which will then be processed in the next step of the investigation.
         "continue": NodesNames.HUMAN_INVESTIGATE_CHAT,
     },
 )
 
+# The human chat node allows for a back-and-forth interaction with the human user. After the human provides input, the system will return to the investigation node to process the new information and continue the investigation.
 graph.add_edge(NodesNames.HUMAN_INVESTIGATE_CHAT, NodesNames.INVESTIGATE_CANDIDATE)
 graph.add_edge(NodesNames.EVIDENCE_MAPPER, NodesNames.TAILOR_RESUME_BULLET_POINTS)
 graph.add_edge(NodesNames.TAILOR_RESUME_BULLET_POINTS, NodesNames.CRITIQUE_TAILORED_BULLET_POINTS)

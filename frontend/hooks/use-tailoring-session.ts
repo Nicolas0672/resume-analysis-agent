@@ -83,6 +83,30 @@ function extractStateValues(stateObj: unknown): Record<string, unknown> | null {
   return curr;
 }
 
+function getZeroModTopicIds(analysis: TailorAnalysis | null | undefined): string[] {
+  if (!analysis) return [];
+  const allIds = new Set<string>();
+  const modIds = new Set<string>();
+
+  analysis.tailor_matched_list?.forEach((m) => {
+    allIds.add(m.topic_id);
+    const hasMod = m.decisions?.some(
+      (d) => d.action?.toUpperCase() === "MODIFY" || d.action?.toUpperCase() === "ADD"
+    );
+    if (hasMod) modIds.add(m.topic_id);
+  });
+
+  analysis.tailor_unmatched_list?.forEach((u) => {
+    allIds.add(u.topic_id);
+    const hasMod = u.decisions?.some(
+      (d) => d.action?.toUpperCase() === "ADD" || !!d.new_bullet?.text
+    );
+    if (hasMod) modIds.add(u.topic_id);
+  });
+
+  return Array.from(allIds).filter((id) => !modIds.has(id));
+}
+
 export function useTailoringSession() {
   const [phase, setPhaseState] = useState<AppPhase>(() => {
     if (typeof window !== "undefined") {
@@ -198,8 +222,15 @@ export function useTailoringSession() {
           if (values.candidate_analysis) setCandidateAnalysis(values.candidate_analysis as CandidateAnalysis);
           if (values.interview_plan) setInterviewPlan(values.interview_plan as InterviewPlan);
           if (values.completed_topic_ids) setCompletedTopicIds(values.completed_topic_ids as string[]);
+          const zeroModIds = values.tailor_analysis
+            ? getZeroModTopicIds(values.tailor_analysis as TailorAnalysis)
+            : [];
           if (values.applied_tailored_topic_ids && Array.isArray(values.applied_tailored_topic_ids)) {
-            setAppliedTopicIds(values.applied_tailored_topic_ids as string[]);
+            setAppliedTopicIds(
+              Array.from(new Set([...(values.applied_tailored_topic_ids as string[]), ...zeroModIds]))
+            );
+          } else if (zeroModIds.length > 0) {
+            setAppliedTopicIds(zeroModIds);
           }
           if (values.evidence_with_details) setEvidenceWithDetails(values.evidence_with_details as EvidenceWithDetails[]);
           if (values.tailor_analysis) setTailorAnalysis(values.tailor_analysis as TailorAnalysis);
@@ -442,7 +473,14 @@ export function useTailoringSession() {
           const stateRes = await getSessionState(sessionId);
           const vals = extractStateValues(stateRes.state);
           if (vals) {
-            if (vals.tailor_analysis) setTailorAnalysis(vals.tailor_analysis as TailorAnalysis);
+            if (vals.tailor_analysis) {
+              const analysis = vals.tailor_analysis as TailorAnalysis;
+              setTailorAnalysis(analysis);
+              const zeroModIds = getZeroModTopicIds(analysis);
+              if (zeroModIds.length > 0) {
+                setAppliedTopicIds((prev) => Array.from(new Set([...prev, ...zeroModIds])));
+              }
+            }
             if (vals.feedbacks) setFeedbacks(vals.feedbacks as Feedbacks);
             if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
             if (vals.resume_to_edit) {
@@ -770,7 +808,13 @@ export function useTailoringSession() {
 
       if ("stage" in res.ai_response && res.ai_response.stage === "completed") {
         const result = res.ai_response.result;
-        if (result.tailor_analysis) setTailorAnalysis(result.tailor_analysis);
+        if (result.tailor_analysis) {
+          setTailorAnalysis(result.tailor_analysis);
+          const zeroModIds = getZeroModTopicIds(result.tailor_analysis);
+          if (zeroModIds.length > 0) {
+            setAppliedTopicIds((prev) => Array.from(new Set([...prev, ...zeroModIds])));
+          }
+        }
         if (result.feedbacks) setFeedbacks(result.feedbacks);
         if (result.resume_data) setResumeData(result.resume_data);
         if (result.resume_to_edit) {
@@ -783,7 +827,14 @@ export function useTailoringSession() {
         const stateRes = await getSessionState(sessionId);
         const vals = extractStateValues(stateRes.state);
         if (vals) {
-          if (vals.tailor_analysis) setTailorAnalysis(vals.tailor_analysis as TailorAnalysis);
+          if (vals.tailor_analysis) {
+            const analysis = vals.tailor_analysis as TailorAnalysis;
+            setTailorAnalysis(analysis);
+            const zeroModIds = getZeroModTopicIds(analysis);
+            if (zeroModIds.length > 0) {
+              setAppliedTopicIds((prev) => Array.from(new Set([...prev, ...zeroModIds])));
+            }
+          }
           if (vals.feedbacks) setFeedbacks(vals.feedbacks as Feedbacks);
           if (vals.resume_data) setResumeData(vals.resume_data as ResumeStructure);
           if (vals.resume_to_edit) {
@@ -815,7 +866,8 @@ export function useTailoringSession() {
           setResumeToEdit(res.resume_to_edit);
         }
         if (res.applied_tailored_topic_ids && Array.isArray(res.applied_tailored_topic_ids)) {
-          setAppliedTopicIds(res.applied_tailored_topic_ids);
+          const zeroModIds = getZeroModTopicIds(tailorAnalysis);
+          setAppliedTopicIds(Array.from(new Set([...res.applied_tailored_topic_ids, ...zeroModIds])));
         } else {
           setAppliedTopicIds((prev) => Array.from(new Set([...prev, topicId])));
         }

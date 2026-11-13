@@ -71,10 +71,28 @@ export function TailoringWorkspace({
     return Array.from(set);
   }, [tailorAnalysis]);
 
-  // Find unapplied topics
+  // Topics that actually require modifications (MODIFY or ADD)
+  const actionableTopicIds = useMemo(() => {
+    const set = new Set<string>();
+    tailorAnalysis?.tailor_matched_list?.forEach((m) => {
+      const hasMod = m.decisions?.some(
+        (d) => d.action?.toUpperCase() === "MODIFY" || d.action?.toUpperCase() === "ADD"
+      );
+      if (hasMod) set.add(m.topic_id);
+    });
+    tailorAnalysis?.tailor_unmatched_list?.forEach((u) => {
+      const hasMod = u.decisions?.some(
+        (d) => d.action?.toUpperCase() === "ADD" || !!d.new_bullet?.text
+      );
+      if (hasMod) set.add(u.topic_id);
+    });
+    return Array.from(set);
+  }, [tailorAnalysis]);
+
+  // Find unapplied topics (only actionable topics that have not yet been applied)
   const unappliedTopicIds = useMemo(() => {
-    return allTopicIds.filter((tid) => !appliedTopicIds.includes(tid));
-  }, [allTopicIds, appliedTopicIds]);
+    return actionableTopicIds.filter((tid) => !appliedTopicIds.includes(tid));
+  }, [actionableTopicIds, appliedTopicIds]);
 
   const handleFinishClick = () => {
     if (unappliedTopicIds.length > 0) {

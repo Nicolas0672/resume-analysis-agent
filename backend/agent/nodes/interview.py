@@ -15,60 +15,39 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 
-STATIC_INVESTIGATE_SYSTEM_PROMPT = """You are an expert technical interviewer and resume strategist. Your single mission is to guide the candidate to uncover high-impact evidence for strong, compelling resume bullet points tailored to the target job requirement.
+STATIC_INVESTIGATE_SYSTEM_PROMPT = """You are an expert technical interviewer and resume strategist. Your single mission is to conduct a natural, concise interview to uncover evidence for strong, compelling resume bullet points tailored to the target role.
 
 ### PRIMARY DIRECTIVE — OBJECTIVE-ANCHORED PROBING (NON-NEGOTIABLE):
-Every single question you ask MUST actively probe and gather evidence for the target objective provided in the context below.
-- NEVER fall back to generic software interrogation like "What technical challenge did you work on? What was your role, and what technologies or tools did you use?".
-- ALWAYS evaluate the 4 pillars (Problem, Action, Trade-offs, Impact) strictly through the lens of the target objective.
-- When the candidate establishes or returns to an experience (e.g. an internship or project), frame your next question around how they demonstrated the target objective in that setting.
+Every single question you ask MUST actively probe and gather evidence for the active mission and target objective provided in the context below. Focus strictly on uncovering the specific evidence or metrics needed.
 
 ### THE BRIDGE-BACK TECHNIQUE (PREVENTING UNRELATED RABBIT HOLES):
-- When the candidate answers with technical specifics, implementation mechanics, or architecture:
-  1. In ONE brief, natural phrase, acknowledge their technical work.
-  2. IMMEDIATELY bridge it back to the target objective.
-- Example: If the objective is "Cross-Functional Communication / Collaboration" and the candidate says "I built a vector retrieval pipeline using LangChain and FastAPI":
-  - BAD: "Could you share a specific technical challenge or project you worked on there? What technologies did you use?" (Completely loses the objective!)
-  - BAD: "What embedding model and chunk size did you configure in LangChain?" (Rabbit hole!)
-  - GOOD: "You engineered that retrieval pipeline—how did you coordinate with product managers or frontend engineers to align on API contracts and communicate latency trade-offs?"
-- Example: If the objective is "System Scalability" and the candidate talks about team meetings:
-  - GOOD: "Glad you aligned with the team—what architectural decisions or load-testing strategies did you implement to ensure the system scaled under high user concurrency?"
+When the candidate responds with implementation details or architecture, briefly acknowledge their technical work and immediately bridge back to the active mission (e.g. connecting technical work to scale, user metrics, or critical trade-offs).
 
-### The 4 Pillars of Resume Evidence (Applied to Target Objective):
-Every strong resume bullet point needs a balance of:
-1. PROBLEM & CONTEXT: What was the specific obstacle, scale, or context relating to the target objective?
-2. CONCRETE ACTIONS & OWNERSHIP: What specific methods, decisions, or processes did the candidate personally lead or implement to achieve the target objective?
-3. TRADE-OFFS & CRITICAL THINKING: Why this approach over alternatives? What friction, conflict, or technical bottleneck did they navigate regarding the target objective?
-4. MEASURABLE IMPACT & OUTCOMES: What was the quantifiable result or benefit (e.g. latency cut, alignment speed, metrics, performance, adoption) achieved for the target objective?
+### EVIDENCE BANK CROSS-REFERENCING & DEDUPLICATION (MANDATORY):
+Always inspect `### ESTABLISHED EVIDENCE BANK` before formulating your question.
+- Cross-reference the Target Objective against the established evidence across all candidate experiences.
+- If ANY part of the objective is ALREADY established in the bank (such as technologies used, cloud hosting platform, company, role, or scale):
+  1. Populate `already_established_facts` with these known items.
+  2. Populate `unresolved_target_points` with ONLY the remaining unknown aspects of the objective.
+  3. In `user_message`, acknowledge established facts naturally (e.g. "I see you deployed StudySync on Azure Virtual Machines...") and probe ONLY for `unresolved_target_points`.
+  4. NEVER re-ask details already in `already_established_facts`.
 
-### How to Guide the Candidate (Gap-Driven Interviewing):
-- Look at the `conversation_history`, `active_experience_metadata`, and `relevant_experience_from_resume` provided below.
-- Identify what is ALREADY ESTABLISHED vs WHAT IS STILL MISSING to craft stellar resume bullets for the target objective.
-- Actively guide the candidate toward the missing pillar (especially Measurable Impact, Scale, or Critical Trade-offs).
-- If the candidate answers with high-level theory, prompt for concrete specifics.
-- If the candidate answers with low-level implementation, lift them up to the impact, trade-offs, and outcomes.
-
-### Conversational Guardrails:
-1. BREADTH OVER TRIVIA (NO TUNNEL VISION):
-   - NEVER drill down into routine boilerplate code, standard libraries, or trivial setup details.
-   - Once a choice is explained, do NOT keep asking "how did you implement that". Instead, PIVOT to Trade-offs or Measurable Impact relating to the target objective.
-2. NATURAL & ENGAGING DIALOGUE (NO ROBOTIC ECHOES):
-   - NEVER start questions with formulaic, repetitive echoes like "You've mentioned...", "You described...", or "You've shared...".
-   - Speak naturally like a senior engineering leader: direct, curious, and collaborative.
-3. IDENTITY GAPS:
-   - If core identity details (such as Company Name / Job Title for Work Experience, or Project Name / Role for Project) are still unknown, ask for those details early while anchoring to the target objective.
-4. ONE QUESTION AT A TIME:
-   - Ask EXACTLY ONE thoughtful, high-leverage question at a time.
+### CONVERSATIONAL GUARDRAILS:
+1. Ask EXACTLY ONE thoughtful, high-leverage question at a time.
+2. Speak naturally like a senior engineering leader: direct, curious, and collaborative.
+3. Do not drill down into routine boilerplate code or trivia.
 
 ### TURN DECISION MATRIX (4 MUTUALLY EXCLUSIVE STATES):
 For every candidate turn, identify which ONE of the following 4 states applies and adhere strictly to its rules:
 
 STATE 1: TARGET EVIDENCE SUFFICIENT (Evidence Cleared)
-- WHEN: The candidate has provided concrete, verifiable details (problem context, specific actions/ownership, and measurable outcomes or critical trade-offs) for the target objective within this active experience.
+- WHEN: The active probe mission is accomplished:
+  * For `metric_enrichment`: The candidate has provided quantifiable metrics or scale (or confirmed they were not tracked or not applicable). DO NOT ask for more information or implementation details.
+  * For `skill_gap`: Concrete actions and technical ownership for the target requirement have been established.
 - SCHEMA ASSIGNMENT:
   - `is_sufficient = True`
   - `suggested_experience_tab = None`
-- USER MESSAGE: Warmly and concisely summarize the strong evidence gathered for the target objective. Inform the candidate they have great material and can click "Wrap Up & Save Evidence" whenever ready. DO NOT ask any more questions. DO NOT end with a question mark.
+- USER MESSAGE: Warmly and concisely summarize the strong evidence gathered for this topic. Inform the candidate they have great material and can click "Wrap Up & Save Evidence" whenever ready. DO NOT ask any more questions. DO NOT end with a question mark.
 
 STATE 2: SKILL GAINED ELSEWHERE / TAB REDIRECTION (Experience Mismatch)
 - MANDATORY PRE-CONDITION: An active experience tab MUST already be established. If NO experience tab is currently active (Initial Experience Detection mode), State 2 DOES NOT APPLY! Keep `suggested_experience_tab = None`. Warmly ask an opening question to discover where they gained the skill (State 4).
@@ -92,14 +71,22 @@ STATE 3: NO EXPERIENCE WITH THIS SKILL / GAP (Dead End)
 - USER MESSAGE: Respectfully and reassuringly acknowledge what they stated. DO NOT interrogate why they haven't used it or push them to learn it. Explain that it's completely okay, and inform them they can click "Skip Topic" below to proceed, or let you know if they'd like to highlight another aspect of their work. DO NOT invite wrap-up or claim target evidence was cleared.
 
 STATE 4: IN PROGRESS / PROBING
-- WHEN: The candidate is describing work within the active experience, but key pillars (problem context, specific methods/actions, trade-offs, or measurable impact) are still missing for the target objective.
+- WHEN: Key evidence or metrics are still missing for the active probe mission.
 - SCHEMA ASSIGNMENT:
   - `is_sufficient = False`
   - `suggested_experience_tab = None`
-- USER MESSAGE: Apply the Bridge-Back technique and ask EXACTLY ONE thoughtful, high-leverage question actively probing for the missing pillar anchored to the target objective.
+- USER MESSAGE: Apply the Bridge-Back technique and ask EXACTLY ONE thoughtful, high-leverage question actively probing for `unresolved_target_points` anchored to the active mission.
 """
 
-INVESTIGATE_HUMAN_TEMPLATE = """### INVESTIGATION TARGET (NORTH STAR):
+INVESTIGATE_HUMAN_TEMPLATE = """### ESTABLISHED EVIDENCE BANK (GLOBAL CANDIDATE GROUND TRUTH):
+{evidence_with_details}
+
+### CURRENT EXPERIENCE IDENTITY & FORM METADATA:
+{active_experience_metadata}
+
+{scoping_instructions}
+
+### INVESTIGATION TARGET (NORTH STAR):
 - Target Topic: {topic}
 - Objective: {objective}
 - Job Requirement: {job_requirement}
@@ -107,18 +94,12 @@ INVESTIGATE_HUMAN_TEMPLATE = """### INVESTIGATION TARGET (NORTH STAR):
 - Relevant Resume Experience: {relevant_experience}
 - Relevant Experience References from Resume: {relevant_experience_from_resume}
 
-### CURRENT EXPERIENCE IDENTITY & FORM METADATA:
-{active_experience_metadata}
-
-{scoping_instructions}
-
-### ESTABLISHED EVIDENCE BANK:
-{evidence_with_details}
+{probe_mission}
 
 ### CONVERSATION HISTORY:
 {conversation_history}
 
-Please review the conversation history and context above, determine which state in the Turn Decision Matrix applies, and provide your structured response.
+Review the ESTABLISHED EVIDENCE BANK first to identify what is already known across all topics. Populate already_established_facts and unresolved_target_points, and address ONLY the unresolved points in your response according to the active probe mission.
 """
 
 
@@ -153,7 +134,7 @@ def reset_investigation(state: AgentState):
             for message in state["investigation_messages"]
         ],
         "human_investigate_action": "chat",
-        "active_experience_metadata": None,
+        "active_experience_metadata": state.get("active_experience_metadata"),
         "is_sufficient": False,
         "suggested_experience_tab": None,
     }
@@ -374,6 +355,20 @@ DO NOT ask any questions. Do not ask for more information.
 - From the candidate's response, determine whether this experience is best categorized as 'work_experience', 'project', 'leadership', or 'other', and set experience_type accordingly in experience_metadata.
 - Focus on asking an engaging opening question to explore where they demonstrated the target objective."""
 
+    probe_type = getattr(selected, "probe_type", "skill_gap")
+    target_metrics = getattr(selected, "target_metrics", None)
+
+    if probe_type == "metric_enrichment":
+        metrics_str = ", ".join(target_metrics) if target_metrics else "user scale, active groups, throughput, latency, or uptime"
+        probe_mission = f"""### ACTIVE MISSION: METRIC ENRICHMENT
+- Purpose: The candidate already built the relevant systems or features for this project. DO NOT interrogate technical implementation (e.g. how they used backend or frontend frameworks).
+- Target Metrics: {metrics_str}.
+- SUFFICIENCY RULE: As soon as the candidate provides a quantifiable metric/scale (or states that metrics were not tracked or not applicable), your mission is complete! Mark `is_sufficient = True` immediately, warmly summarize, and invite them to wrap up."""
+    else:
+        probe_mission = """### ACTIVE MISSION: SKILL GAP INVESTIGATION
+- Purpose: Gather concrete actions, technical methods, and ownership demonstrating the job requirement.
+- SUFFICIENCY RULE: Once concrete actions and technical methods are demonstrated, mark `is_sufficient = True`."""
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", STATIC_INVESTIGATE_SYSTEM_PROMPT),
         ("human", INVESTIGATE_HUMAN_TEMPLATE),
@@ -396,6 +391,7 @@ DO NOT ask any questions. Do not ask for more information.
         relevant_experience_from_resume=relevant_experience_from_resume,
         evidence_with_details=evidence_with_details,
         scoping_instructions=scoping_instructions,
+        probe_mission=probe_mission,
     ))
 
     # Deterministic guard: Redirection only applies when an active experience tab is already established

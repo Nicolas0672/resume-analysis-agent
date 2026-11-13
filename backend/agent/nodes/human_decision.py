@@ -39,6 +39,8 @@ def human_after_interview_planner(state: AgentState):
             "reason": item.reason,
             "objective": item.objective,
             "job_requirement": item.job_requirement,
+            "probe_type": getattr(item, "probe_type", "skill_gap"),
+            "target_metrics": getattr(item, "target_metrics", None),
         }
         for item in plan.interview_plan
         if item.topic_id not in completed_topic_ids
@@ -68,7 +70,9 @@ def human_after_interview_planner(state: AgentState):
         selected_topic = next((item for item in plan.interview_plan if item.topic_id == topic_id), None)
         if selected_topic and selected_topic.relevant_experience_from_resume and state.get("resume_data"):
             for ref in selected_topic.relevant_experience_from_resume:
+                # Getting the corresponding entry type from the resume data based on the reference related to the selected topic. Ex: If the reference type is "work_experience", we look for the corresponding work experience entry in the resume data.
                 entries = getattr(state["resume_data"], ref.type, [])
+                # Find the specific entry in the resume that matches the reference's entry_id. This is done by iterating through the entries and checking if the entry_id matches the one specified in the reference.
                 entry = next((e for e in entries if getattr(e, "entry_id", None) == ref.entry_id), None)
                 if entry:
                     if ref.type == "work_experience":

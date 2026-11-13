@@ -1,4 +1,5 @@
-from agent.model import EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks, RegeneratedBullets, RegeneratedBulletsList, ResumeReference, TailorAnalysis, TailorMatchList, TailorMatched, TailorUnmatched, TailorUnmatchedList
+from typing import Optional
+from agent.model import Evidence, EvidenceMappingResult, EvidenceWithDetails, Feedback, Feedbacks, RegeneratedBullets, RegeneratedBulletsList, ResumeReference, TailorAnalysis, TailorMatchList, TailorMatched, TailorUnmatched, TailorUnmatchedList
 from agent.state import AgentState
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -95,6 +96,7 @@ async def tailor_resume_bullet_points(state: AgentState):
         if current.evidence_with_details.evidence is None:
             continue
 
+        # If the evidence is matched to a specific resume entry, we retrieve that entry from the resume data using the provided reference. We then store the matched evidence along with the corresponding resume entry and topic_id for further processing.
         if current.mapping_status == "MATCHED":
             entry_id = current.resume_reference.entry_id
             type = current.resume_reference.type
@@ -149,6 +151,13 @@ Job keywords should improve alignment only when they accurately describe the ver
 Prefer a strong existing bullet over an unnecessary rewrite.
 When modifying or adding a bullet, prioritize XYZ format when sufficient evidence exists for accomplishment, metric/impact, and method. Do not invent missing details.
 For every matched candidate, return resume_reference exactly as provided.
+
+MULTI-TOPIC COHESION & ANTI-DUPLICATION (CRITICAL):
+- Non-Overlapping Responsibilities: Every proposed bullet on a resume entry must represent a distinct functional pillar (e.g. core product, backend APIs, frontend UI, cloud hosting/infrastructure, AI tooling).
+- NEVER produce two bullets on the same resume entry that describe the same functional responsibility (e.g., do NOT have one bullet for "Hosted on Azure VM" and a second bullet for "Deployed on Azure VM running Ubuntu").
+- Single Consolidated Bullet: When multiple topics provide evidence about the same underlying responsibility, CONDENSE all details into ONE single modified bullet rather than creating an extra ADD bullet.
+- Metric Placement: User scale or adoption metrics (e.g. 50 active users, 10 study groups) measure the application or backend APIs. Attach these metrics to the core application or backend API bullet when possible.
+- Consolidation Tracking: If this topic's evidence was consolidated into another topic's bullet on this entry, set action to "KEEP" and set consolidated_with_topic_id to that topic's ID. Explain the consolidation in reasoning.
     """
         ),
         (
@@ -286,199 +295,101 @@ For every matched candidate, return resume_reference exactly as provided.
         "tailor_analysis": tailor_analysis
     }
 
-async def critique_tailored_bullet_points(state: AgentState):
+def merge_evidences(evidences: list[Evidence]) -> Optional[Evidence]:
+    """Merges multiple Evidence objects belonging to the same experience into a unified Evidence record."""
+    valid_evidences = [e for e in evidences if e is not None]
+    if not valid_evidences:
+        return None
+    if len(valid_evidences) == 1:
+        return valid_evidences[0]
 
-    model = ChatOpenAI(
-        model="gpt-4o",
-        temperature=0
+    first = valid_evidences[0]
+    exp_type = next((e.experience_type for e in valid_evidences if e.experience_type), first.experience_type)
+    company = next((e.company for e in valid_evidences if e.company), None)
+    job_title = next((e.job_title for e in valid_evidences if e.job_title), None)
+    project_name = next((e.project_name for e in valid_evidences if e.project_name), None)
+    leadership_title = next((e.leadership_title for e in valid_evidences if e.leadership_title), None)
+    leadership_position = next((e.leadership_position for e in valid_evidences if e.leadership_position), None)
+    other_title = next((e.other_title for e in valid_evidences if e.other_title), None)
+    job_location = next((e.job_location for e in valid_evidences if e.job_location), None)
+    duration = next((e.duration for e in valid_evidences if e.duration), None)
+
+    def merge_lists(getter):
+        merged = []
+        for ev in valid_evidences:
+            items = getter(ev)
+            if items:
+                for item in items:
+                    if item and item not in merged:
+                        merged.append(item)
+        return merged if merged else None
+
+    return Evidence(
+        experience_type=exp_type,
+        company=company,
+        job_title=job_title,
+        project_name=project_name,
+        leadership_title=leadership_title,
+        leadership_position=leadership_position,
+        other_title=other_title,
+        job_location=job_location,
+        duration=duration,
+        experience_found=merge_lists(lambda e: e.experience_found),
+        technologies=merge_lists(lambda e: e.technologies),
+        ownership=merge_lists(lambda e: e.ownership),
+        scope=merge_lists(lambda e: e.scope),
+        metrics=merge_lists(lambda e: e.metrics),
+        impact=merge_lists(lambda e: e.impact),
+        motivation=merge_lists(lambda e: e.motivation),
+        candidate_statements=merge_lists(lambda e: e.candidate_statements),
     )
-    llm_structured = model.with_structured_output(Feedbacks)
-    feedbacks = []
 
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-    """ 
-You are a resume factuality critic.
 
-Determine whether each proposed bullet contains any factual claim that is not
-supported by the candidate evidence.
+def get_consolidated_evidence_by_topic(state: AgentState) -> dict[str, Optional[Evidence]]:
+    """Groups evidence by resume reference for matched experiences so the critic and regenerator
+    see all verified candidate statements and facts across topics for that project/job.
+    """
+    evidence_mapping = state.get("evidence_mapping")
+    if not evidence_mapping or not evidence_mapping.evidence_mappings:
+        return {}
 
-The candidate evidence is the source of truth. Ignore the job requirement.
+    evidence_mappings = evidence_mapping.evidence_mappings
 
-For each bullet:
-- Verify every factual claim against the entire evidence.
-- Reasonable paraphrasing and synthesis are allowed.
-- Evidence can be distributed across the evidence context.
-- Do not require the evidence to use the exact wording of the bullet.
-- Be strict about fabricated metrics, technologies, ownership, scope, impact,
-  projects, responsibilities, or achievements.
-- If every factual claim is supported, mark the bullet valid.
-- If any factual claim is unsupported, mark it invalid and identify that claim.
+    # Group evidence by matched resume_reference
+    matched_evidences_by_ref: dict[tuple[str, int], list[Evidence]] = {}
+    topic_to_ref: dict[str, tuple[str, int]] = {}
 
-Do not judge writing quality, relevance, ATS optimization, or wording.
-
-The question is simply:
-"Could the candidate truthfully say this based on the evidence provided?
-"""), 
-        ("human", "Here are the input: {input}")
-    ])
-
-    tailor_analysis = state["tailor_analysis"]
-    
-    evidence_by_topic_id = {
-        evidence.evidence_with_details.topic_id: evidence.evidence_with_details
-        for evidence in state["evidence_mapping"].evidence_mappings
-    }
-
-    all_tailor_matched = tailor_analysis.tailor_matched_list
-    all_tailor_unmatched = tailor_analysis.tailor_unmatched_list 
-    all_bullets_with_evidence = []
-
-    for tailor_result in all_tailor_matched + all_tailor_unmatched:
-        all_bullets = []
-
-        for decision in tailor_result.decisions:
-            if decision.action in ["ADD", "MODIFY"]:
-                bullet = {
-                    "new_bullet_point": decision.new_bullet,
-                }
-
-                all_bullets.append(bullet)
-
-        evidence = evidence_by_topic_id[tailor_result.topic_id]
-        
-
-        all_bullets_with_evidence.append({
-            "all_bullets": all_bullets,
-            "evidence_context": format_evidence_for_critic(evidence),
-            "topic_id": evidence.topic_id,
-        })
-
-        response = await llm_structured.ainvoke(prompt.format_messages(input=all_bullets_with_evidence))
-        response.feedbacks[-1].topic_id = evidence.topic_id
-        feedbacks.extend(response.feedbacks)
-        
-    return {
-        "feedbacks": Feedbacks(feedbacks=feedbacks),
-        "iteration_loop": state.get("iteration_loop", 0) + 1
-    }
-
-async def regenerate_bullets(state: AgentState):
-    evidence_by_topic_id = {
-        evidence.evidence_with_details.topic_id: evidence.evidence_with_details
-        for evidence in state["evidence_mapping"].evidence_mappings
-    }
-
-    feedbacks = state.get("feedbacks").feedbacks
-
-    feedback_by_topic_id = {
-        feedback.topic_id: feedback
-        for feedback in feedbacks
-    }
-
-    feedback_with_evidence = []
-    all_topic_id = []
-
-    for tailor in (
-        state["tailor_analysis"].tailor_matched_list
-        + state["tailor_analysis"].tailor_unmatched_list
-    ):
-        feedback = feedback_by_topic_id.get(tailor.topic_id)
-        all_topic_id.append(tailor.topic_id)
-
-        if not feedback:
-            continue
-
-        evidence = evidence_by_topic_id[tailor.topic_id]
-
-        for decision in tailor.decisions:
-            if decision.action == "ADD" or decision.action == "MODIFY":
-                bullet_feedback = next(
-                    (
-                        bf
-                        for bf in feedback.bullet_feedbacks
-                            if (
-                                bf.sentence_id == decision.new_bullet.sentence_id
-                                or (
-                                    decision.old_bullet is not None
-                                    and bf.sentence_id == decision.old_bullet.sentence_id
-                                )
-                            )                
-                        ),
-                    None,
+    for mapping in evidence_mappings:
+        topic_id = mapping.evidence_with_details.topic_id
+        if mapping.mapping_status == "MATCHED" and mapping.resume_reference:
+            ref_key = (mapping.resume_reference.type, mapping.resume_reference.entry_id)
+            topic_to_ref[topic_id] = ref_key
+            if mapping.evidence_with_details.evidence:
+                matched_evidences_by_ref.setdefault(ref_key, []).append(
+                    mapping.evidence_with_details.evidence
                 )
 
-                if not bullet_feedback or bullet_feedback.valid:
-                    continue
+    # Build consolidated evidence map per topic_id
+    consolidated_by_topic: dict[str, Optional[Evidence]] = {}
+    for mapping in evidence_mappings:
+        topic_id = mapping.evidence_with_details.topic_id
+        if topic_id in topic_to_ref:
+            ref_key = topic_to_ref[topic_id]
+            ev_list = matched_evidences_by_ref.get(ref_key, [])
+            consolidated_by_topic[topic_id] = merge_evidences(ev_list) if ev_list else mapping.evidence_with_details.evidence
+        else:
+            consolidated_by_topic[topic_id] = mapping.evidence_with_details.evidence
 
-                feedback_with_evidence.append({
-                    "old_bullet": decision.old_bullet,
-                    "new_bullet": decision.new_bullet,
-                    "feedback": bullet_feedback,
-                    "evidence": evidence,
-                    "topic_id": tailor.topic_id
-                })
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", 
-"""
-You are a resume bullet correction agent.
-
-A factuality critic found issues with the proposed bullets below.
-
-Each input contains a topic_id.
-
-The topic_id is an immutable identifier.
-You MUST copy it exactly into your output.
-Do not alter it.
-Do not create new IDs.
-
-For each proposal:
-- Review the original bullet(s) if present, candidate evidence, and critic feedback.
-- Correct only the unsupported factual claims identified by the critic.
-- Preserve all factual claims that are supported.
-- Do not introduce new claims, technologies, metrics, responsibilities, scope, or impact.
-- Do not use evidence outside the provided evidence.
-- Optimize for clarity, conciseness, and XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
-- Also optimize for ATS readability and keyword alignment, but never at the expense of factual accuracy.
-- Return the corrected bullet points for each topic.
-"""), ("human", "Here is the feedback with evidence {feedback_with_evidence}")
-    ])
-    model = ChatOpenAI(
-        model="gpt-4o",
-        temperature=0
-    )
-    llm_structured = model.with_structured_output(RegeneratedBulletsList)
-
-    res = await llm_structured.ainvoke(prompt.format_messages(feedback_with_evidence=feedback_with_evidence))
+    return consolidated_by_topic
 
 
-    all_tailored = (
-        state["tailor_analysis"].tailor_matched_list
-        + state["tailor_analysis"].tailor_unmatched_list
-    )
-
-
-    for regenerated in res.regenerated_bullet_list:
-        if regenerated.topic_id not in all_topic_id:
-            raise ValueError(
-                f"Invalid topic_id returned by LLM: {regenerated.topic_id}"
-            )
-        for proposal in all_tailored:
-            if proposal.topic_id == regenerated.topic_id:
-                for new in regenerated.new_bullet_points:
-                    sent_id = new.sentence_id
-                    text = new.text
-                    for decision in proposal.decisions:
-                        if decision.action in ["ADD", "MODIFY"] and decision.new_bullet.sentence_id == sent_id:
-                            decision.new_bullet.text = text
-
-    return state
-
-
-def format_evidence_for_critic(evidence: EvidenceWithDetails) -> str:
-    e = evidence.evidence
+def format_evidence_for_critic(evidence: Evidence | EvidenceWithDetails | None) -> str:
+    if evidence is None:
+        e = None
+    elif isinstance(evidence, EvidenceWithDetails):
+        e = evidence.evidence
+    else:
+        e = evidence
 
     def safe(value):
         if value is None:
@@ -520,3 +431,214 @@ IMPACT:
 Candidate Statement:
 {safe(e.candidate_statements) if e else "Not provided"}
 """.strip()
+
+
+async def critique_tailored_bullet_points(state: AgentState):
+    tailor_analysis = state.get("tailor_analysis")
+    all_tailor_matched = tailor_analysis.tailor_matched_list if tailor_analysis else []
+    all_tailor_unmatched = tailor_analysis.tailor_unmatched_list if tailor_analysis else []
+
+    # 1. Early-exit guard: Check if there are any ADD or MODIFY bullets across all topics
+    has_bullets_to_critique = any(
+        decision.action in ["ADD", "MODIFY"] and decision.new_bullet
+        for tailor_result in (all_tailor_matched + all_tailor_unmatched)
+        for decision in tailor_result.decisions
+    )
+
+    if not has_bullets_to_critique:
+        return {
+            "feedbacks": Feedbacks(feedbacks=[]),
+            "iteration_loop": state.get("iteration_loop", 0) + 1,
+        }
+
+    consolidated_evidence_map = get_consolidated_evidence_by_topic(state)
+
+    # 2. Build single batch payload of topics with bullets to critique
+    all_bullets_with_evidence = []
+    for tailor_result in all_tailor_matched + all_tailor_unmatched:
+        bullets = []
+        for decision in tailor_result.decisions:
+            if decision.action in ["ADD", "MODIFY"] and decision.new_bullet:
+                bullets.append({
+                    "sentence_id": decision.new_bullet.sentence_id,
+                    "new_bullet_point": decision.new_bullet.text,
+                })
+
+        if not bullets:
+            continue
+
+        evidence = consolidated_evidence_map.get(tailor_result.topic_id)
+        all_bullets_with_evidence.append({
+            "all_bullets": bullets,
+            "evidence_context": format_evidence_for_critic(evidence),
+            "topic_id": tailor_result.topic_id,
+        })
+
+    if not all_bullets_with_evidence:
+        return {
+            "feedbacks": Feedbacks(feedbacks=[]),
+            "iteration_loop": state.get("iteration_loop", 0) + 1,
+        }
+
+    model = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0,
+    )
+    llm_structured = model.with_structured_output(Feedbacks)
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """ 
+You are a resume factuality critic.
+
+Determine whether each proposed bullet contains any factual claim that is not
+supported by the candidate evidence.
+
+The candidate evidence is the source of truth. Ignore the job requirement.
+
+Each input item contains a topic_id.
+The topic_id is an immutable identifier. You MUST copy it exactly into your output. Do not alter or create IDs.
+
+For each bullet:
+- Verify every factual claim against the entire evidence context.
+- Reasonable paraphrasing and synthesis are allowed.
+- Evidence can be distributed across the evidence context.
+- Do not require the evidence to use the exact wording of the bullet.
+- Be strict about fabricated metrics, technologies, ownership, scope, impact,
+  projects, responsibilities, or achievements.
+- If every factual claim is supported, mark the bullet valid.
+- If any factual claim is unsupported, mark it invalid and identify that claim.
+
+Do not judge writing quality, relevance, ATS optimization, or wording.
+
+The question is simply:
+"Could the candidate truthfully say this based on the evidence provided?
+"""), 
+        ("human", "Here are the input: {input}")
+    ])
+
+    response = await llm_structured.ainvoke(prompt.format_messages(input=all_bullets_with_evidence))
+
+    # Defensive fallback: if single topic feedback returned without topic_id populated
+    for fb in response.feedbacks:
+        if not fb.topic_id and len(all_bullets_with_evidence) == 1:
+            fb.topic_id = all_bullets_with_evidence[0]["topic_id"]
+
+    return {
+        "feedbacks": response,
+        "iteration_loop": state.get("iteration_loop", 0) + 1,
+    }
+
+
+async def regenerate_bullets(state: AgentState):
+    feedbacks_obj = state.get("feedbacks")
+    feedbacks = feedbacks_obj.feedbacks if feedbacks_obj else []
+
+    feedback_by_topic_id = {
+        feedback.topic_id: feedback
+        for feedback in feedbacks
+        if feedback.topic_id is not None
+    }
+
+    consolidated_evidence_map = get_consolidated_evidence_by_topic(state)
+
+    feedback_with_evidence = []
+    all_topic_id = []
+
+    for tailor in (
+        state["tailor_analysis"].tailor_matched_list
+        + state["tailor_analysis"].tailor_unmatched_list
+    ):
+        feedback = feedback_by_topic_id.get(tailor.topic_id)
+        all_topic_id.append(tailor.topic_id)
+
+        if not feedback:
+            continue
+
+        evidence = consolidated_evidence_map.get(tailor.topic_id)
+
+        for decision in tailor.decisions:
+            if decision.action in ["ADD", "MODIFY"] and decision.new_bullet:
+                bullet_feedback = next(
+                    (
+                        bf
+                        for bf in feedback.bullet_feedbacks
+                        if (
+                            bf.sentence_id == decision.new_bullet.sentence_id
+                            or (
+                                decision.old_bullet is not None
+                                and bf.sentence_id == decision.old_bullet.sentence_id
+                            )
+                        )
+                    ),
+                    None,
+                )
+
+                if not bullet_feedback or bullet_feedback.valid:
+                    continue
+
+                feedback_with_evidence.append({
+                    "old_bullet": decision.old_bullet,
+                    "new_bullet": decision.new_bullet,
+                    "feedback": bullet_feedback,
+                    "evidence": format_evidence_for_critic(evidence),
+                    "topic_id": tailor.topic_id,
+                })
+
+    if not feedback_with_evidence:
+        return state
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", 
+"""
+You are a resume bullet correction agent.
+
+A factuality critic found issues with the proposed bullets below.
+
+Each input contains a topic_id.
+
+The topic_id is an immutable identifier.
+You MUST copy it exactly into your output.
+Do not alter it.
+Do not create new IDs.
+
+For each proposal:
+- Review the original bullet(s) if present, candidate evidence, and critic feedback.
+- Correct only the unsupported factual claims identified by the critic.
+- Preserve all factual claims that are supported.
+- Do not introduce new claims, technologies, metrics, responsibilities, scope, or impact.
+- Do not use evidence outside the provided evidence.
+- Optimize for clarity, conciseness, and XYZ format if enough details is present such as metrics/impact: accomplished X, as measured by Y, by doing Z
+- Also optimize for ATS readability and keyword alignment, but never at the expense of factual accuracy.
+- Return the corrected bullet points for each topic.
+"""), ("human", "Here is the feedback with evidence {feedback_with_evidence}")
+    ])
+    model = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0
+    )
+    llm_structured = model.with_structured_output(RegeneratedBulletsList)
+
+    res = await llm_structured.ainvoke(prompt.format_messages(feedback_with_evidence=feedback_with_evidence))
+
+    all_tailored = (
+        state["tailor_analysis"].tailor_matched_list
+        + state["tailor_analysis"].tailor_unmatched_list
+    )
+
+    for regenerated in res.regenerated_bullet_list:
+        if regenerated.topic_id not in all_topic_id:
+            raise ValueError(
+                f"Invalid topic_id returned by LLM: {regenerated.topic_id}"
+            )
+        for proposal in all_tailored:
+            if proposal.topic_id == regenerated.topic_id:
+                for new in regenerated.new_bullet_points:
+                    sent_id = new.sentence_id
+                    text = new.text
+                    for decision in proposal.decisions:
+                        if decision.action in ["ADD", "MODIFY"] and decision.new_bullet and decision.new_bullet.sentence_id == sent_id:
+                            decision.new_bullet.text = text
+
+    return state
